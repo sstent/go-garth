@@ -2,6 +2,7 @@ package garth
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -23,17 +24,38 @@ type GarthAuthenticator struct {
 
 // NewAuthenticator creates a new Garth authentication client
 func NewAuthenticator(opts ClientOptions) Authenticator {
-	// Create HTTP client with reasonable defaults
+	// Create HTTP client with browser-like settings
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			MinVersion: tls.VersionTLS12,
+		},
+		Proxy: http.ProxyFromEnvironment,
+	}
 	client := &http.Client{
-		Timeout: opts.Timeout,
+		Timeout:   opts.Timeout,
+		Transport: transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			// Allow up to 10 redirects
+			if len(via) >= 10 {
+				return errors.New("stopped after 10 redirects")
+			}
+			return nil
+		},
 	}
 
-	return &GarthAuthenticator{
+	auth := &GarthAuthenticator{
 		client:    client,
 		tokenURL:  opts.TokenURL,
 		storage:   opts.Storage,
 		userAgent: "GarthAuthenticator/1.0",
 	}
+
+	// Set authenticator reference in storage if needed
+	if setter, ok := opts.Storage.(AuthenticatorSetter); ok {
+		setter.SetAuthenticator(auth)
+	}
+
+	return auth
 }
 
 // Login authenticates with Garmin services
@@ -111,6 +133,12 @@ func (a *GarthAuthenticator) RefreshToken(ctx context.Context, refreshToken stri
 	}
 
 	token.Expiry = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+
+	// Persist the refreshed token to storage
+	if err := a.storage.SaveToken(&token); err != nil {
+		return nil, fmt.Errorf("failed to save refreshed token: %w", err)
+	}
+
 	return &token, nil
 }
 
@@ -123,12 +151,14 @@ func (a *GarthAuthenticator) GetClient() *http.Client {
 
 // fetchLoginParams retrieves required tokens from Garmin login page
 func (a *GarthAuthenticator) fetchLoginParams(ctx context.Context) (lt, execution string, err error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://sso.garmin.com/sso/signin?service=https://connect.garmin.com", nil)
+	loginURL := "https://sso.garmin.com/sso/signin?service=https://connect.garmin.com"
+	req, err := http.NewRequestWithContext(ctx, "GET", loginURL, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create login page request: %w", err)
 	}
 
-	req.Header = a.getBrowserHeaders()
+	// Use enhanced browser headers including Referer and Origin
+	req.Header = a.getEnhancedBrowserHeaders(loginURL)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -344,16 +374,21 @@ func extractParam(pattern, body string) (string, error) {
 	return matches[1], nil
 }
 
-// getBrowserHeaders returns browser-like headers for requests
-func (a *GarthAuthenticator) getBrowserHeaders() http.Header {
+// getEnhancedBrowserHeaders returns browser-like headers including Referer and Origin
+func (a *GarthAuthenticator) getEnhancedBrowserHeaders(referrer string) http.Header {
+	u, _ := url.Parse(referrer)
+	origin := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+
 	return http.Header{
 		"User-Agent":                {a.userAgent},
-		"Accept":                    {"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8"},
+		"Accept":                    {"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"},
 		"Accept-Language":           {"en-US,en;q=0.9"},
 		"Accept-Encoding":           {"gzip, deflate, br"},
 		"Connection":                {"keep-alive"},
 		"Cache-Control":             {"max-age=0"},
-		"Sec-Fetch-Site":            {"none"},
+		"Origin":                    {origin},
+		"Referer":                   {referrer},
+		"Sec-Fetch-Site":            {"same-origin"},
 		"Sec-Fetch-Mode":            {"navigate"},
 		"Sec-Fetch-User":            {"?1"},
 		"Sec-Fetch-Dest":            {"document"},

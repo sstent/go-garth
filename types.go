@@ -6,6 +6,15 @@ import (
 	"time"
 )
 
+// TokenStorage defines the interface for token persistence
+type TokenStorage interface {
+	// GetToken retrieves the stored token
+	GetToken() (*Token, error)
+
+	// SaveToken stores a new token
+	SaveToken(token *Token) error
+}
+
 // Error interface defines common error behavior for Garth
 type Error interface {
 	error
@@ -23,8 +32,8 @@ type Token struct {
 	AccessToken  string    `json:"access_token"`
 	TokenType    string    `json:"token_type,omitempty"`
 	RefreshToken string    `json:"refresh_token"`
-	ExpiresIn    int       `json:"expires_in"` // Duration in seconds
-	Expiry       time.Time `json:"expiry"`
+	ExpiresIn    int       `json:"expires_in,omitempty"` // Duration in seconds
+	Expiry       time.Time `json:"expiry"`               // Absolute time of expiration
 }
 
 // IsExpired checks if the token has expired
@@ -106,4 +115,9 @@ func (e *APIError) Unwrap() error {
 // GetCause returns the underlying error (implements Error interface)
 func (e *APIError) GetCause() error {
 	return e.Cause
+}
+
+// AuthenticatorSetter interface for storage that needs authenticator reference
+type AuthenticatorSetter interface {
+	SetAuthenticator(a Authenticator)
 }
