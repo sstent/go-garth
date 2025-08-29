@@ -28,8 +28,16 @@ func TestActivityService_List(t *testing.T) {
 	apiClient := NewAPIClient(ts.URL, http.DefaultClient)
 	activityService := NewActivityService(apiClient)
 
-	// Test List method
-	activities, err := activityService.List(context.Background(), 10, time.Time{}, time.Time{})
+	// Test List method with filters
+	startDate := time.Date(2025, time.August, 1, 0, 0, 0, 0, time.UTC)
+	endDate := time.Date(2025, time.August, 31, 0, 0, 0, 0, time.UTC)
+
+	opts := ActivityListOptions{
+		Limit:     10,
+		StartDate: startDate,
+		EndDate:   endDate,
+	}
+	activities, err := activityService.List(context.Background(), opts)
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}

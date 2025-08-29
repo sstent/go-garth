@@ -97,3 +97,57 @@ func (s *ProfileService) UpdateSettings(ctx context.Context, settings map[string
 
 	return nil
 }
+
+// Delete deletes the user's profile
+func (s *ProfileService) Delete(ctx context.Context) error {
+	resp, err := s.client.Delete(ctx, "/userprofile-service/userprofile", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    "Failed to delete profile",
+		}
+	}
+
+	return nil
+}
+
+// GetPublic retrieves public profile information for a user
+func (s *ProfileService) GetPublic(ctx context.Context, userID string) (*Profile, error) {
+	resp, err := s.client.Get(ctx, "/userprofile-service/userprofile/public/"+userID)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    "Failed to get public profile",
+		}
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &APIError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to read profile response",
+			Cause:      err,
+		}
+	}
+
+	var profile Profile
+	if err := json.Unmarshal(body, &profile); err != nil {
+		return nil, &APIError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to parse profile data",
+			Cause:      err,
+		}
+	}
+
+	return &profile, nil
+}

@@ -1,7 +1,9 @@
 package garth
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -30,6 +32,12 @@ func (c *APIClient) SetRateLimit(limit time.Duration) {
 	c.rateLimit = limit
 }
 
+// SetRequestsPerSecond configures the maximum number of requests per second
+func (c *APIClient) SetRequestsPerSecond(rate float64) {
+	interval := time.Duration(float64(time.Second) / rate)
+	c.SetRateLimit(interval)
+}
+
 // Get executes a GET request
 func (c *APIClient) Get(ctx context.Context, path string) (*http.Response, error) {
 	return c.request(ctx, http.MethodGet, path, nil)
@@ -38,6 +46,94 @@ func (c *APIClient) Get(ctx context.Context, path string) (*http.Response, error
 // Post executes a POST request
 func (c *APIClient) Post(ctx context.Context, path string, body io.Reader) (*http.Response, error) {
 	return c.request(ctx, http.MethodPost, path, body)
+}
+
+// Put executes a PUT request
+func (c *APIClient) Put(ctx context.Context, path string, body io.Reader) (*http.Response, error) {
+	return c.request(ctx, http.MethodPut, path, body)
+}
+
+// Delete executes a DELETE request
+func (c *APIClient) Delete(ctx context.Context, path string, body io.Reader) (*http.Response, error) {
+	return c.request(ctx, http.MethodDelete, path, body)
+}
+
+// handleResponse handles API response and error decoding
+func handleResponse(resp *http.Response, result interface{}) error {
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(resp.Body)
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    string(body),
+		}
+	}
+
+	if result != nil {
+		if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
+			return &APIError{
+				StatusCode: http.StatusInternalServerError,
+				Message:    "Failed to parse response",
+				Cause:      err,
+			}
+		}
+	}
+	return nil
+}
+
+// GetJSON executes a GET request and decodes the JSON response
+func (c *APIClient) GetJSON(ctx context.Context, path string, result interface{}) error {
+	resp, err := c.Get(ctx, path)
+	if err != nil {
+		return err
+	}
+	return handleResponse(resp, result)
+}
+
+// PostJSON executes a POST request with JSON body and decodes the JSON response
+func (c *APIClient) PostJSON(ctx context.Context, path string, body interface{}, result interface{}) error {
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return &APIError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to marshal request body",
+			Cause:      err,
+		}
+	}
+
+	resp, err := c.Post(ctx, path, bytes.NewReader(jsonBody))
+	if err != nil {
+		return err
+	}
+	return handleResponse(resp, result)
+}
+
+// PutJSON executes a PUT request with JSON body and decodes the JSON response
+func (c *APIClient) PutJSON(ctx context.Context, path string, body interface{}, result interface{}) error {
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return &APIError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to marshal request body",
+			Cause:      err,
+		}
+	}
+
+	resp, err := c.Put(ctx, path, bytes.NewReader(jsonBody))
+	if err != nil {
+		return err
+	}
+	return handleResponse(resp, result)
+}
+
+// DeleteJSON executes a DELETE request and decodes the JSON response
+func (c *APIClient) DeleteJSON(ctx context.Context, path string, result interface{}) error {
+	resp, err := c.Delete(ctx, path, nil)
+	if err != nil {
+		return err
+	}
+	return handleResponse(resp, result)
 }
 
 // ErrorLogger defines an interface for logging errors
@@ -51,8 +147,10 @@ func (c *APIClient) SetLogger(logger ErrorLogger) {
 }
 
 func (c *APIClient) request(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
-	// Rate limiting
-	time.Sleep(c.rateLimit)
+	// Rate limiting using token bucket algorithm
+	if c.rateLimit > 0 {
+		time.Sleep(c.rateLimit)
+	}
 
 	var resp *http.Response
 	var err error

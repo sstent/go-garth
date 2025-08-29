@@ -1,3 +1,33 @@
+// Package garth provides a Go client for the Garmin Connect API.
+//
+// This client supports authentication, user profile management, activity tracking,
+// workout management, and other Garmin Connect services.
+//
+// Features:
+// - OAuth 2.0 authentication with MFA support
+// - User profile operations (retrieve, update, delete)
+// - Activity management (create, read, update, delete)
+// - Workout management (CRUD operations, scheduling, templates)
+// - Comprehensive error handling
+// - Automatic token refresh
+//
+// Usage:
+//  1. Create an Authenticator instance with your credentials
+//  2. Obtain an access token
+//  3. Create an APIClient using the authenticator
+//  4. Use service methods to interact with Garmin Connect API
+//
+// Example:
+//
+//	opts := garth.NewClientOptionsFromEnv()
+//	auth := garth.NewBasicAuthenticator(opts)
+//	token, err := auth.Login(ctx, "username", "password", "")
+//	client := garth.NewAPIClient(auth)
+//
+//	// Get user profile
+//	profile, err := client.Profile().Get(ctx)
+//
+// For more details, see the documentation for each service.
 package garth
 
 import (

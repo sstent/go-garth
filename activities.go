@@ -1,6 +1,7 @@
 package garth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -49,6 +50,25 @@ type ActivityDetails struct {
 	ActivityMetrics json.RawMessage `json:"activityMetrics"`
 }
 
+// ActivityListOptions provides filtering options for listing activities
+type ActivityListOptions struct {
+	Limit        int
+	StartDate    time.Time
+	EndDate      time.Time
+	ActivityType string
+	NameContains string
+}
+
+// ActivityUpdate represents fields that can be updated on an activity
+type ActivityUpdate struct {
+	Name        string    `json:"activityName,omitempty"`
+	Description string    `json:"description,omitempty"`
+	Type        string    `json:"activityType,omitempty"`
+	StartTime   time.Time `json:"startTime,omitempty"`
+	Distance    float64   `json:"distance,omitempty"`
+	Duration    float64   `json:"duration,omitempty"`
+}
+
 // ActivityService provides access to activity operations
 type ActivityService struct {
 	client *APIClient
@@ -59,17 +79,23 @@ func NewActivityService(client *APIClient) *ActivityService {
 	return &ActivityService{client: client}
 }
 
-// List retrieves a list of activities for the current user
-func (s *ActivityService) List(ctx context.Context, limit int, startDate, endDate time.Time) ([]Activity, error) {
+// List retrieves a list of activities for the current user with optional filters
+func (s *ActivityService) List(ctx context.Context, opts ActivityListOptions) ([]Activity, error) {
 	params := url.Values{}
-	if limit > 0 {
-		params.Set("limit", strconv.Itoa(limit))
+	if opts.Limit > 0 {
+		params.Set("limit", strconv.Itoa(opts.Limit))
 	}
-	if !startDate.IsZero() {
-		params.Set("startDate", startDate.Format(time.RFC3339))
+	if !opts.StartDate.IsZero() {
+		params.Set("startDate", opts.StartDate.Format(time.RFC3339))
 	}
-	if !endDate.IsZero() {
-		params.Set("endDate", endDate.Format(time.RFC3339))
+	if !opts.EndDate.IsZero() {
+		params.Set("endDate", opts.EndDate.Format(time.RFC3339))
+	}
+	if opts.ActivityType != "" {
+		params.Set("activityType", opts.ActivityType)
+	}
+	if opts.NameContains != "" {
+		params.Set("nameContains", opts.NameContains)
 	}
 
 	path := "/activitylist-service/activities/search/activities"
@@ -109,6 +135,116 @@ func (s *ActivityService) List(ctx context.Context, limit int, startDate, endDat
 	}
 
 	return activities, nil
+}
+
+// Create creates a new activity
+func (s *ActivityService) Create(ctx context.Context, activity Activity) (*Activity, error) {
+	jsonBody, err := json.Marshal(activity)
+	if err != nil {
+		return nil, &APIError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to marshal activity",
+			Cause:      err,
+		}
+	}
+
+	resp, err := s.client.Post(ctx, "/activity-service/activity", bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    "Failed to create activity",
+		}
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &APIError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to read activity response",
+			Cause:      err,
+		}
+	}
+
+	var createdActivity Activity
+	if err := json.Unmarshal(body, &createdActivity); err != nil {
+		return nil, &APIError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to parse activity data",
+			Cause:      err,
+		}
+	}
+
+	return &createdActivity, nil
+}
+
+// Update updates an existing activity
+func (s *ActivityService) Update(ctx context.Context, activityID int64, update ActivityUpdate) (*Activity, error) {
+	jsonBody, err := json.Marshal(update)
+	if err != nil {
+		return nil, &APIError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to marshal activity update",
+			Cause:      err,
+		}
+	}
+
+	path := "/activity-service/activity/" + strconv.FormatInt(activityID, 10)
+	resp, err := s.client.Put(ctx, path, bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    "Failed to update activity",
+		}
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, &APIError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to read activity response",
+			Cause:      err,
+		}
+	}
+
+	var updatedActivity Activity
+	if err := json.Unmarshal(body, &updatedActivity); err != nil {
+		return nil, &APIError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to parse activity data",
+			Cause:      err,
+		}
+	}
+
+	return &updatedActivity, nil
+}
+
+// Delete deletes an existing activity
+func (s *ActivityService) Delete(ctx context.Context, activityID int64) error {
+	path := "/activity-service/activity/" + strconv.FormatInt(activityID, 10)
+	resp, err := s.client.Delete(ctx, path, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		return &APIError{
+			StatusCode: resp.StatusCode,
+			Message:    "Failed to delete activity",
+		}
+	}
+
+	return nil
 }
 
 // Get retrieves detailed information about a specific activity
