@@ -58,9 +58,60 @@ func (a *GarthAuthenticator) Login(ctx context.Context, username, password, mfaT
 
 // RefreshToken refreshes an expired access token
 func (a *GarthAuthenticator) RefreshToken(ctx context.Context, refreshToken string) (*Token, error) {
-	// Implementation would make request to token endpoint
-	// using refresh_token grant type
-	return nil, errors.New("refreshToken not implemented")
+	if refreshToken == "" {
+		return nil, &AuthError{
+			StatusCode: http.StatusBadRequest,
+			Message:    "Refresh token is required",
+			Type:       "invalid_request",
+		}
+	}
+
+	data := url.Values{}
+	data.Set("grant_type", "refresh_token")
+	data.Set("refresh_token", refreshToken)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", a.tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, &AuthError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to create refresh request",
+			Cause:      err,
+		}
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", a.userAgent)
+	req.SetBasicAuth("garmin-connect", "garmin-connect-secret")
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, &AuthError{
+			StatusCode: http.StatusBadGateway,
+			Message:    "Refresh request failed",
+			Cause:      err,
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &AuthError{
+			StatusCode: resp.StatusCode,
+			Message:    fmt.Sprintf("Token refresh failed: %s", body),
+			Type:       "token_refresh_failure",
+		}
+	}
+
+	var token Token
+	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+		return nil, &AuthError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to parse token response",
+			Cause:      err,
+		}
+	}
+
+	token.Expiry = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+	return &token, nil
 }
 
 // GetClient returns an authenticated HTTP client
@@ -198,8 +249,89 @@ func (a *GarthAuthenticator) exchangeTicketForToken(ctx context.Context, ticket 
 
 // handleMFA processes multi-factor authentication
 func (a *GarthAuthenticator) handleMFA(ctx context.Context, username, password, mfaToken, responseBody string) (*Token, error) {
-	// For brevity, skipping full MFA implementation in this example
-	return nil, errors.New("MFA not implemented")
+	// Extract CSRF token from response body
+	csrfToken, err := extractParam(`name="_csrf"\s+value="([^"]+)"`, responseBody)
+	if err != nil {
+		return nil, &AuthError{
+			StatusCode: http.StatusPreconditionFailed,
+			Message:    "MFA CSRF token not found",
+			Cause:      err,
+		}
+	}
+
+	// Prepare MFA request
+	data := url.Values{}
+	data.Set("username", username)
+	data.Set("password", password)
+	data.Set("mfaToken", mfaToken)
+	data.Set("embed", "true")
+	data.Set("rememberme", "on")
+	data.Set("_csrf", csrfToken)
+	data.Set("_eventId", "submit")
+	data.Set("geolocation", "")
+	data.Set("clientId", "GarminConnect")
+	data.Set("service", "https://connect.garmin.com")
+	data.Set("webhost", "https://connect.garmin.com")
+	data.Set("fromPage", "oauth")
+	data.Set("locale", "en_US")
+	data.Set("id", "gauth-widget")
+	data.Set("redirectAfterAccountLoginUrl", "https://connect.garmin.com/oauthConfirm")
+	data.Set("redirectAfterAccountCreationUrl", "https://connect.garmin.com/oauthConfirm")
+
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://sso.garmin.com/sso/signin", strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, &AuthError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to create MFA request",
+			Cause:      err,
+		}
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", a.userAgent)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, &AuthError{
+			StatusCode: http.StatusBadGateway,
+			Message:    "MFA request failed",
+			Cause:      err,
+		}
+	}
+	defer resp.Body.Close()
+
+	// Handle MFA response
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &AuthError{
+			StatusCode: resp.StatusCode,
+			Message:    fmt.Sprintf("MFA failed: %s", body),
+			Type:       "mfa_failure",
+		}
+	}
+
+	// Parse MFA response
+	var mfaResponse struct {
+		Ticket string `json:"ticket"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&mfaResponse); err != nil {
+		return nil, &AuthError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to parse MFA response",
+			Cause:      err,
+		}
+	}
+
+	if mfaResponse.Ticket == "" {
+		return nil, &AuthError{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "Invalid MFA response - ticket missing",
+			Type:       "invalid_mfa_response",
+		}
+	}
+
+	return a.exchangeTicketForToken(ctx, mfaResponse.Ticket)
 }
 
 // extractParam helper to extract regex pattern
