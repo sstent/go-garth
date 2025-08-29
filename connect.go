@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -12,6 +13,7 @@ type APIClient struct {
 	baseURL    string
 	httpClient *http.Client
 	rateLimit  time.Duration
+	logger     ErrorLogger // Optional error logger
 }
 
 // NewAPIClient creates a new API client instance
@@ -38,17 +40,29 @@ func (c *APIClient) Post(ctx context.Context, path string, body io.Reader) (*htt
 	return c.request(ctx, http.MethodPost, path, body)
 }
 
+// ErrorLogger defines an interface for logging errors
+type ErrorLogger interface {
+	Errorf(format string, args ...interface{})
+}
+
+// SetLogger sets the error logger for the API client
+func (c *APIClient) SetLogger(logger ErrorLogger) {
+	c.logger = logger
+}
+
 func (c *APIClient) request(ctx context.Context, method, path string, body io.Reader) (*http.Response, error) {
 	// Rate limiting
 	time.Sleep(c.rateLimit)
 
 	var resp *http.Response
 	var err error
+	var req *http.Request
 	maxRetries := 3
 	backoff := 500 * time.Millisecond
 
 	for i := 0; i < maxRetries; i++ {
-		req, createErr := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+		var createErr error
+		req, createErr = http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 		if createErr != nil {
 			return nil, &APIError{
 				StatusCode: http.StatusInternalServerError,
@@ -75,19 +89,42 @@ func (c *APIClient) request(ctx context.Context, method, path string, body io.Re
 		break
 	}
 
+	// Extract query parameters for error context
+	var queryValues url.Values
+	if req != nil {
+		queryValues = req.URL.Query()
+	}
+
 	if err != nil {
-		return nil, &APIError{
+		apiErr := &APIError{
 			StatusCode: http.StatusBadGateway,
 			Message:    "Request failed after retries",
 			Cause:      err,
 		}
+		reqErr := NewRequestError(method, req.URL.String(), queryValues, http.StatusBadGateway, apiErr)
+
+		// Log error if logger is configured
+		if c.logger != nil {
+			c.logger.Errorf("API request failed: %v, Method: %s, URL: %s", reqErr, method, req.URL.String())
+		}
+
+		return nil, reqErr
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, &APIError{
+		apiErr := &APIError{
 			StatusCode: resp.StatusCode,
 			Message:    "API request failed",
 		}
+		reqErr := NewRequestError(method, req.URL.String(), queryValues, resp.StatusCode, apiErr)
+
+		// Log error if logger is configured
+		if c.logger != nil {
+			c.logger.Errorf("API request failed with status %d: %s, Method: %s, URL: %s",
+				resp.StatusCode, apiErr.Message, method, req.URL.String())
+		}
+
+		return nil, reqErr
 	}
 
 	return resp, nil

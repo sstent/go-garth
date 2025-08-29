@@ -75,9 +75,16 @@ func TestAPIClient_ErrorHandling(t *testing.T) {
 		t.Fatal("Expected error but got none")
 	}
 
-	apiErr, ok := err.(*APIError)
+	// Check for RequestError wrapper
+	reqErr, ok := err.(*RequestError)
 	if !ok {
-		t.Fatalf("Expected APIError, got %T", err)
+		t.Fatalf("Expected RequestError, got %T", err)
+	}
+
+	// Check the wrapped APIError
+	apiErr, ok := reqErr.GetCause().(*APIError)
+	if !ok {
+		t.Fatalf("Expected APIError inside RequestError, got %T", reqErr.GetCause())
 	}
 	if apiErr.StatusCode != http.StatusNotFound {
 		t.Errorf("Expected 404 status, got %d", apiErr.StatusCode)
