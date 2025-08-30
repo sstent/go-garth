@@ -20,6 +20,8 @@ type GarthAuthenticator struct {
 	tokenURL  string
 	storage   TokenStorage
 	userAgent string
+	// Add CSRF token for session management
+	csrfToken string
 }
 
 // NewAuthenticator creates a new Garth authentication client
@@ -60,12 +62,20 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 
 // Login authenticates with Garmin services
 func (a *GarthAuthenticator) Login(ctx context.Context, username, password, mfaToken string) (*Token, error) {
-	lt, execution, err := a.fetchLoginParams(ctx)
+	// Fetch OAuth1 token to initialize session
+	if _, err := a.fetchOAuth1Token(ctx); err != nil {
+		return nil, fmt.Errorf("failed to get OAuth1 token: %w", err)
+	}
+
+	// Get login parameters including CSRF token
+	lt, execution, csrf, err := a.fetchLoginParams(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get login params: %w", err)
 	}
 
-	token, err := a.authenticate(ctx, username, password, mfaToken, lt, execution)
+	a.csrfToken = csrf // Store CSRF for session
+
+	token, err := a.authenticate(ctx, username, password, mfaToken, lt, execution, csrf)
 	if err != nil {
 		return nil, err
 	}
@@ -150,11 +160,12 @@ func (a *GarthAuthenticator) GetClient() *http.Client {
 }
 
 // fetchLoginParams retrieves required tokens from Garmin login page
-func (a *GarthAuthenticator) fetchLoginParams(ctx context.Context) (lt, execution string, err error) {
-	loginURL := "https://sso.garmin.com/sso/signin?service=https://connect.garmin.com"
+func (a *GarthAuthenticator) fetchLoginParams(ctx context.Context) (lt, execution, csrf string, err error) {
+	// Use dynamically built login URL
+	loginURL := a.buildLoginURL()
 	req, err := http.NewRequestWithContext(ctx, "GET", loginURL, nil)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create login page request: %w", err)
+		return "", "", "", fmt.Errorf("failed to create login page request: %w", err)
 	}
 
 	// Use enhanced browser headers including Referer and Origin
@@ -162,30 +173,78 @@ func (a *GarthAuthenticator) fetchLoginParams(ctx context.Context) (lt, executio
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return "", "", fmt.Errorf("login page request failed: %w", err)
+		return "", "", "", fmt.Errorf("login page request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to read login page response: %w", err)
+		return "", "", "", fmt.Errorf("failed to read login page response: %w", err)
 	}
 
-	lt, err = extractParam(`name="lt"\s+value="([^"]+)"`, string(body))
+	bodyStr := string(body)
+
+	lt, err = extractParam(`name="lt"\s+value="([^"]+)"`, bodyStr)
 	if err != nil {
-		return "", "", fmt.Errorf("lt param not found: %w", err)
+		return "", "", "", fmt.Errorf("lt param not found: %w", err)
 	}
 
-	execution, err = extractParam(`name="execution"\s+value="([^"]+)"`, string(body))
+	execution, err = extractParam(`name="execution"\s+value="([^"]+)"`, bodyStr)
 	if err != nil {
-		return "", "", fmt.Errorf("execution param not found: %w", err)
+		return "", "", "", fmt.Errorf("execution param not found: %w", err)
 	}
 
-	return lt, execution, nil
+	// Extract CSRF token from response
+	csrf, err = extractParam(`name="_csrf"\s+value="([^"]+)"`, bodyStr)
+	if err != nil {
+		return "", "", "", fmt.Errorf("csrf param not found: %w", err)
+	}
+
+	return lt, execution, csrf, nil
+}
+
+// buildLoginURL constructs the complete login URL with parameters
+func (a *GarthAuthenticator) buildLoginURL() string {
+	params := url.Values{}
+	params.Set("service", "https://connect.garmin.com/oauthConfirm")
+	params.Set("webhost", "https://connect.garmin.com")
+	params.Set("source", "https://connect.garmin.com/signin")
+	params.Set("redirectAfterAccountLoginUrl", "https://connect.garmin.com/oauthConfirm")
+	params.Set("redirectAfterAccountCreationUrl", "https://connect.garmin.com/oauthConfirm")
+	params.Set("gauthHost", "https://sso.garmin.com/sso")
+	params.Set("locale", "en_US")
+	params.Set("id", "gauth-widget")
+	params.Set("clientId", "GarminConnect")
+	params.Set("consumeServiceTicket", "false")
+	params.Set("generateExtraServiceTicket", "true")
+
+	return "https://sso.garmin.com/sso/signin?" + params.Encode()
+}
+
+// fetchOAuth1Token retrieves initial OAuth1 token for session
+func (a *GarthAuthenticator) fetchOAuth1Token(ctx context.Context) (string, error) {
+	oauth1URL := "https://connect.garmin.com/oauthConfirm"
+
+	req, err := http.NewRequestWithContext(ctx, "GET", oauth1URL, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create OAuth1 request: %w", err)
+	}
+
+	req.Header.Set("User-Agent", a.userAgent)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("OAuth1 request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	// We don't actually need the token value since cookies are handled automatically
+	// Just need to ensure the request succeeds to set session cookies
+	return "", nil
 }
 
 // authenticate performs the authentication flow
-func (a *GarthAuthenticator) authenticate(ctx context.Context, username, password, mfaToken, lt, execution string) (*Token, error) {
+func (a *GarthAuthenticator) authenticate(ctx context.Context, username, password, mfaToken, lt, execution, csrf string) (*Token, error) {
 	data := url.Values{}
 	data.Set("username", username)
 	data.Set("password", password)

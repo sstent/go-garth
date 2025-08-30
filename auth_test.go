@@ -3,7 +3,6 @@ package garth
 import (
 	"context"
 	"log"
-	"net/http"
 	"os"
 	"testing"
 	"time"
@@ -12,18 +11,6 @@ import (
 )
 
 func TestRealAuthentication(t *testing.T) {
-	// First check if Garmin servers are available
-	resp, err := http.Head("https://sso.garmin.com/sso/signin?service=https://connect.garmin.com")
-	if err != nil {
-		t.Fatalf("Network error: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// Skip test if Garmin servers return 5xx error
-	if resp.StatusCode >= 500 {
-		t.Skipf("Garmin servers unavailable (status %d), skipping test", resp.StatusCode)
-	}
-
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
 		t.Fatalf("Error loading .env file: %v", err)
