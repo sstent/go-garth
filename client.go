@@ -1,0 +1,144 @@
+package garth
+
+import (
+	"context"
+	"net/http"
+	"sync"
+	"time"
+)
+
+// AuthTransport implements http.RoundTripper to inject authentication headers
+type AuthTransport struct {
+	base      http.RoundTripper
+	auth      *GarthAuthenticator
+	storage   TokenStorage
+	userAgent string
+	mutex     sync.Mutex // Protects refreshing token
+}
+
+// NewAuthTransport creates a new authenticated transport
+func NewAuthTransport(auth *GarthAuthenticator, storage TokenStorage, base http.RoundTripper) *AuthTransport {
+	if base == nil {
+		base = http.DefaultTransport
+	}
+
+	return &AuthTransport{
+		base:      base,
+		auth:      auth,
+		storage:   storage,
+		userAgent: "GarthClient/1.0",
+	}
+}
+
+// RoundTrip executes a single HTTP transaction with authentication
+func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	// Clone request to avoid modifying the original
+	req = cloneRequest(req)
+
+	// Get current token
+	token, err := t.storage.GetToken()
+	if err != nil {
+		return nil, &AuthError{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "Token not available",
+			Cause:      err,
+		}
+	}
+
+	// Refresh token if expired
+	if token.IsExpired() {
+		newToken, err := t.refreshToken(req.Context(), token)
+		if err != nil {
+			return nil, err
+		}
+		token = newToken
+	}
+
+	// Add Authorization header
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+	req.Header.Set("User-Agent", t.userAgent)
+
+	// Execute request with retry logic
+	var resp *http.Response
+	maxRetries := 3
+	backoff := 200 * time.Millisecond // Initial backoff duration
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		resp, err = t.base.RoundTrip(req)
+		if err != nil {
+			// Network error, retry with backoff
+			time.Sleep(backoff)
+			backoff *= 2 // Exponential backoff
+			continue
+		}
+
+		// Handle token expiration during request (e.g. token revoked)
+		if resp.StatusCode == http.StatusUnauthorized {
+			resp.Body.Close()
+			// Refresh token and update request
+			token, err = t.refreshToken(req.Context(), token)
+			if err != nil {
+				return nil, err
+			}
+			req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+			continue
+		}
+
+		// Retry server errors (5xx) and rate limits (429)
+		if resp.StatusCode >= 500 && resp.StatusCode < 600 || resp.StatusCode == http.StatusTooManyRequests {
+			resp.Body.Close()
+			time.Sleep(backoff)
+			backoff *= 2
+			continue
+		}
+
+		// Successful response
+		return resp, nil
+	}
+
+	// Return last error or response if max retries exceeded
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+// refreshToken handles token refresh with mutex protection
+func (t *AuthTransport) refreshToken(ctx context.Context, token *Token) (*Token, error) {
+	t.mutex.Lock()
+	defer t.mutex.Unlock()
+
+	// Check again in case another goroutine refreshed while waiting
+	currentToken, err := t.storage.GetToken()
+	if err != nil {
+		return nil, err
+	}
+	if !currentToken.IsExpired() {
+		return currentToken, nil
+	}
+
+	// Perform refresh
+	newToken, err := t.auth.RefreshToken(ctx, token.RefreshToken)
+	if err != nil {
+		return nil, err
+	}
+
+	// Save new token
+	if err := t.storage.SaveToken(newToken); err != nil {
+		return nil, err
+	}
+
+	return newToken, nil
+}
+
+// cloneRequest returns a clone of the provided HTTP request
+func cloneRequest(r *http.Request) *http.Request {
+	// Shallow copy of the struct
+	clone := *r
+	// Deep copy of the headers
+	clone.Header = make(http.Header, len(r.Header))
+	for k, v := range r.Header {
+		clone.Header[k] = v
+	}
+	return &clone
+}
