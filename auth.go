@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -74,22 +75,22 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 
 // Login authenticates with Garmin services
 func (a *GarthAuthenticator) Login(ctx context.Context, username, password, mfaToken string) (*Token, error) {
-	// Fetch and store OAuth1 token to initialize session
+	// Step 1: Get OAuth1 token FIRST
 	oauth1Token, err := a.fetchOAuth1Token(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OAuth1 token: %w", err)
 	}
 	a.oauth1Token = oauth1Token
 
-	// Get login parameters including CSRF token
-	authToken, tokenType, err := a.fetchLoginParams(ctx)
+	// Step 2: Now get login parameters with OAuth1 context
+	authToken, tokenType, err := a.fetchLoginParamsWithOAuth1(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get login params: %w", err)
 	}
 
 	a.csrfToken = authToken // Store for session
 
-	// Call authenticate with the extracted token and its type
+	// Step 3: Authenticate with all tokens
 	token, err := a.authenticate(ctx, username, password, mfaToken, authToken, tokenType)
 	if err != nil {
 		return nil, err
@@ -174,34 +175,41 @@ func (a *GarthAuthenticator) GetClient() *http.Client {
 	return a.client
 }
 
-// fetchLoginParams retrieves required tokens from Garmin login page and returns token + type
-func (a *GarthAuthenticator) fetchLoginParams(ctx context.Context) (token string, tokenType string, err error) {
-	// Step 1: Set cookies by accessing the embed endpoint
-	embedURL := "https://sso.garmin.com/sso/embed?" + url.Values{
-		"id":          []string{"gauth-widget"},
-		"embedWidget": []string{"true"},
-		"gauthHost":   []string{"https://sso.garmin.com/sso"},
-	}.Encode()
+// fetchLoginParamsWithOAuth1 retrieves login parameters with OAuth1 context
+func (a *GarthAuthenticator) fetchLoginParamsWithOAuth1(ctx context.Context) (token string, tokenType string, err error) {
+	// Build login URL with OAuth1 context
+	params := url.Values{}
+	params.Set("id", "gauth-widget")
+	params.Set("embedWidget", "true")
+	params.Set("gauthHost", "https://sso.garmin.com/sso")
+	params.Set("service", "https://connect.garmin.com/oauthConfirm")
+	params.Set("source", "https://sso.garmin.com/sso")
+	params.Set("redirectAfterAccountLoginUrl", "https://connect.garmin.com/oauthConfirm")
+	params.Set("redirectAfterAccountCreationUrl", "https://connect.garmin.com/oauthConfirm")
+	params.Set("consumeServiceTicket", "false")
+	params.Set("generateExtraServiceTicket", "true")
+	params.Set("clientId", "GarminConnect")
+	params.Set("locale", "en_US")
 
-	embedReq, err := http.NewRequestWithContext(ctx, "GET", embedURL, nil)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to create embed request: %w", err)
+	// Add OAuth1 token if we have it
+	if a.oauth1Token != "" {
+		params.Set("oauth_token", a.oauth1Token)
 	}
-	embedReq.Header = a.getEnhancedBrowserHeaders(embedURL)
 
-	_, err = a.client.Do(embedReq)
-	if err != nil {
-		return "", "", fmt.Errorf("embed request failed: %w", err)
-	}
+	loginURL := "https://sso.garmin.com/sso/signin?" + params.Encode()
 
-	// Step 2: Get login parameters including CSRF token
-	loginURL := a.buildLoginURL()
 	req, err := http.NewRequestWithContext(ctx, "GET", loginURL, nil)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to create login page request: %w", err)
 	}
 
-	req.Header = a.getEnhancedBrowserHeaders(loginURL)
+	// Set headers with proper referrer chain
+	req.Header.Set("User-Agent", a.userAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Referer", "https://connect.garmin.com/oauthConfirm")
+	req.Header.Set("Origin", "https://connect.garmin.com")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -216,14 +224,15 @@ func (a *GarthAuthenticator) fetchLoginParams(ctx context.Context) (token string
 
 	bodyStr := string(body)
 
-	// Use our robust CSRF token extractor with multiple patterns
+	// Extract CSRF/lt token
 	token, tokenType, err = getCSRFTokenWithType(bodyStr)
 	if err != nil {
-		filename := fmt.Sprintf("login_page_%d.html", time.Now().Unix())
+		// Save for debugging
+		filename := fmt.Sprintf("login_page_oauth1_%d.html", time.Now().Unix())
 		if writeErr := os.WriteFile(filename, body, 0644); writeErr == nil {
-			return "", "", fmt.Errorf("authentication token not found: %w (HTML saved to %s)", err, filename)
+			return "", "", fmt.Errorf("authentication token not found with OAuth1 context: %w (HTML saved to %s)", err, filename)
 		}
-		return "", "", fmt.Errorf("authentication token not found: %w (failed to save HTML for debugging)", err)
+		return "", "", fmt.Errorf("authentication token not found with OAuth1 context: %w", err)
 	}
 
 	return token, tokenType, nil
@@ -250,6 +259,7 @@ func (a *GarthAuthenticator) buildLoginURL() string {
 
 // fetchOAuth1Token retrieves initial OAuth1 token for session
 func (a *GarthAuthenticator) fetchOAuth1Token(ctx context.Context) (string, error) {
+	// Step 1: Initial OAuth1 request - this should NOT have parameters initially
 	oauth1URL := "https://connect.garmin.com/oauthConfirm"
 
 	req, err := http.NewRequestWithContext(ctx, "GET", oauth1URL, nil)
@@ -257,7 +267,9 @@ func (a *GarthAuthenticator) fetchOAuth1Token(ctx context.Context) (string, erro
 		return "", fmt.Errorf("failed to create OAuth1 request: %w", err)
 	}
 
+	// Set proper headers
 	req.Header.Set("User-Agent", a.userAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -265,24 +277,52 @@ func (a *GarthAuthenticator) fetchOAuth1Token(ctx context.Context) (string, erro
 	}
 	defer resp.Body.Close()
 
-	// Extract oauth_token from Location header or response body
-	if location := resp.Header.Get("Location"); location != "" {
-		if u, err := url.Parse(location); err == nil {
-			if token := u.Query().Get("oauth_token"); token != "" {
-				return token, nil
+	// Handle redirect case - OAuth1 token often comes from redirect location
+	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
+		location := resp.Header.Get("Location")
+		if location != "" {
+			if u, err := url.Parse(location); err == nil {
+				if token := u.Query().Get("oauth_token"); token != "" {
+					return token, nil
+				}
 			}
 		}
 	}
 
-	// Or extract from HTML response
-	body, _ := io.ReadAll(resp.Body)
-	tokenPattern := regexp.MustCompile(`oauth_token=([^&\s"]+)`)
-	matches := tokenPattern.FindStringSubmatch(string(body))
-	if len(matches) > 1 {
-		return matches[1], nil
+	// If no redirect, parse response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read OAuth1 response: %w", err)
 	}
 
-	return "", fmt.Errorf("OAuth1 token not found")
+	// Look for oauth_token in various formats
+	patterns := []string{
+		`oauth_token=([^&\s"']+)`,
+		`"oauth_token":\s*"([^"]+)"`,
+		`'oauth_token':\s*'([^']+)'`,
+		`oauth_token["']?\s*[:=]\s*["']?([^"'\s&]+)`,
+	}
+
+	for _, pattern := range patterns {
+		re := regexp.MustCompile(pattern)
+		if matches := re.FindStringSubmatch(string(body)); len(matches) > 1 {
+			return matches[1], nil
+		}
+	}
+
+	// Debug: save response to project debug directory
+	debugDir := "go-garth/debug"
+	if err := os.MkdirAll(debugDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create debug directory: %w", err)
+	}
+
+	filename := filepath.Join(debugDir, fmt.Sprintf("oauth1_response_%d.html", time.Now().Unix()))
+	absPath, _ := filepath.Abs(filename)
+	if writeErr := os.WriteFile(filename, body, 0644); writeErr == nil {
+		return "", fmt.Errorf("OAuth1 token not found (response saved to %s)", absPath)
+	}
+
+	return "", fmt.Errorf("OAuth1 token not found in response (failed to save debug file)")
 }
 
 // authenticate performs the authentication flow
@@ -292,16 +332,18 @@ func (a *GarthAuthenticator) authenticate(ctx context.Context, username, passwor
 	data.Set("password", password)
 	data.Set("embed", "true")
 	data.Set("rememberme", "on")
-	// Use correct token field based on token type
+
+	// Set the correct token field based on type
 	if tokenType == "lt" {
 		data.Set("lt", authToken)
 	} else {
 		data.Set("_csrf", authToken)
 	}
+
 	data.Set("_eventId", "submit")
 	data.Set("geolocation", "")
 	data.Set("clientId", "GarminConnect")
-	data.Set("service", "https://connect.garmin.com")
+	data.Set("service", "https://connect.garmin.com/oauthConfirm") // Updated service URL
 	data.Set("webhost", "https://connect.garmin.com")
 	data.Set("fromPage", "oauth")
 	data.Set("locale", "en_US")
