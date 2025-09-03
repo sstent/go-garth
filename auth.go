@@ -13,6 +13,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"net/http/cookiejar" // Add cookiejar import
 )
 
 // GarthAuthenticator implements the Authenticator interface
@@ -34,9 +36,18 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 		},
 		Proxy: http.ProxyFromEnvironment,
 	}
+
+	// Create cookie jar for session persistence
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		// Fallback to no cookie jar if creation fails
+		jar = nil
+	}
+
 	client := &http.Client{
 		Timeout:   opts.Timeout,
 		Transport: transport,
+		Jar:       jar, // Add cookie jar
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			// Allow up to 10 redirects
 			if len(via) >= 10 {
@@ -50,7 +61,7 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 		client:    client,
 		tokenURL:  opts.TokenURL,
 		storage:   opts.Storage,
-		userAgent: "GarthAuthenticator/1.0",
+		userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 	}
 
 	// Set authenticator reference in storage if needed
@@ -69,15 +80,15 @@ func (a *GarthAuthenticator) Login(ctx context.Context, username, password, mfaT
 	}
 
 	// Get login parameters including CSRF token
-	csrf, err := a.fetchLoginParams(ctx)
+	authToken, tokenType, err := a.fetchLoginParams(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get login params: %w", err)
 	}
 
-	a.csrfToken = csrf // Store CSRF for session
+	a.csrfToken = authToken // Store for session
 
-	// Call authenticate with only the needed parameters
-	token, err := a.authenticate(ctx, username, password, mfaToken, csrf)
+	// Call authenticate with the extracted token and its type
+	token, err := a.authenticate(ctx, username, password, mfaToken, authToken, tokenType)
 	if err != nil {
 		return nil, err
 	}
@@ -161,8 +172,8 @@ func (a *GarthAuthenticator) GetClient() *http.Client {
 	return a.client
 }
 
-// fetchLoginParams retrieves required tokens from Garmin login page
-func (a *GarthAuthenticator) fetchLoginParams(ctx context.Context) (csrf string, err error) {
+// fetchLoginParams retrieves required tokens from Garmin login page and returns token + type
+func (a *GarthAuthenticator) fetchLoginParams(ctx context.Context) (token string, tokenType string, err error) {
 	// Step 1: Set cookies by accessing the embed endpoint
 	embedURL := "https://sso.garmin.com/sso/embed?" + url.Values{
 		"id":          []string{"gauth-widget"},
@@ -172,49 +183,52 @@ func (a *GarthAuthenticator) fetchLoginParams(ctx context.Context) (csrf string,
 
 	embedReq, err := http.NewRequestWithContext(ctx, "GET", embedURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create embed request: %w", err)
+		return "", "", fmt.Errorf("failed to create embed request: %w", err)
 	}
 	embedReq.Header = a.getEnhancedBrowserHeaders(embedURL)
 
 	_, err = a.client.Do(embedReq)
 	if err != nil {
-		return "", fmt.Errorf("embed request failed: %w", err)
+		return "", "", fmt.Errorf("embed request failed: %w", err)
 	}
 
 	// Step 2: Get login parameters including CSRF token
 	loginURL := a.buildLoginURL()
 	req, err := http.NewRequestWithContext(ctx, "GET", loginURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("failed to create login page request: %w", err)
+		return "", "", fmt.Errorf("failed to create login page request: %w", err)
 	}
 
 	req.Header = a.getEnhancedBrowserHeaders(loginURL)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("login page request failed: %w", err)
+		return "", "", fmt.Errorf("login page request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", fmt.Errorf("failed to read login page response: %w", err)
+		return "", "", fmt.Errorf("failed to read login page response: %w", err)
 	}
 
 	bodyStr := string(body)
 
 	// Use our robust CSRF token extractor with multiple patterns
-	csrf, err = getCSRFToken(bodyStr)
+	token, err = getCSRFToken(bodyStr)
 	if err != nil {
-		// Write HTML to file for debugging
 		filename := fmt.Sprintf("login_page_%d.html", time.Now().Unix())
 		if writeErr := os.WriteFile(filename, body, 0644); writeErr == nil {
-			return "", fmt.Errorf("csrf param not found: %w (HTML saved to %s)", err, filename)
+			return "", "", fmt.Errorf("authentication token not found: %w (HTML saved to %s)", err, filename)
 		}
-		return "", fmt.Errorf("csrf param not found: %w (failed to save HTML for debugging)", err)
+		return "", "", fmt.Errorf("authentication token not found: %w (failed to save HTML for debugging)", err)
 	}
 
-	return csrf, nil
+	// Determine token type (lt or _csrf)
+	if strings.Contains(token, "LT-") {
+		return token, "lt", nil
+	}
+	return token, "_csrf", nil
 }
 
 // buildLoginURL constructs the complete login URL with parameters
@@ -223,13 +237,13 @@ func (a *GarthAuthenticator) buildLoginURL() string {
 	params := url.Values{}
 	params.Set("id", "gauth-widget")
 	params.Set("embedWidget", "true")
-	params.Set("gauthHost", "https://sso.garmin.com/sso/embed")
-	params.Set("service", "https://sso.garmin.com/sso/embed")
-	params.Set("source", "https://sso.garmin.com/sso/embed")
-	params.Set("redirectAfterAccountLoginUrl", "https://sso.garmin.com/sso/embed")
-	params.Set("redirectAfterAccountCreationUrl", "https://sso.garmin.com/sso/embed")
-	params.Set("consumeServiceTicket", "false")      // Added from Python implementation
-	params.Set("generateExtraServiceTicket", "true") // Added from Python implementation
+	params.Set("gauthHost", "https://sso.garmin.com/sso")
+	params.Set("service", "https://connect.garmin.com")
+	params.Set("source", "https://sso.garmin.com/sso")
+	params.Set("redirectAfterAccountLoginUrl", "https://connect.garmin.com/oauthConfirm")
+	params.Set("redirectAfterAccountCreationUrl", "https://connect.garmin.com/oauthConfirm")
+	params.Set("consumeServiceTicket", "false")
+	params.Set("generateExtraServiceTicket", "true")
 	params.Set("clientId", "GarminConnect")
 	params.Set("locale", "en_US")
 
@@ -253,19 +267,39 @@ func (a *GarthAuthenticator) fetchOAuth1Token(ctx context.Context) (string, erro
 	}
 	defer resp.Body.Close()
 
-	// We don't actually need the token value since cookies are handled automatically
-	// Just need to ensure the request succeeds to set session cookies
-	return "", nil
+	// Extract oauth_token from Location header or response body
+	if location := resp.Header.Get("Location"); location != "" {
+		if u, err := url.Parse(location); err == nil {
+			if token := u.Query().Get("oauth_token"); token != "" {
+				return token, nil
+			}
+		}
+	}
+
+	// Or extract from HTML response
+	body, _ := io.ReadAll(resp.Body)
+	tokenPattern := regexp.MustCompile(`oauth_token=([^&\s"]+)`)
+	matches := tokenPattern.FindStringSubmatch(string(body))
+	if len(matches) > 1 {
+		return matches[1], nil
+	}
+
+	return "", fmt.Errorf("OAuth1 token not found")
 }
 
 // authenticate performs the authentication flow
-func (a *GarthAuthenticator) authenticate(ctx context.Context, username, password, mfaToken, csrf string) (*Token, error) {
+func (a *GarthAuthenticator) authenticate(ctx context.Context, username, password, mfaToken, authToken, tokenType string) (*Token, error) {
 	data := url.Values{}
 	data.Set("username", username)
 	data.Set("password", password)
 	data.Set("embed", "true")
 	data.Set("rememberme", "on")
-	data.Set("_csrf", csrf)
+	// Use correct token field based on token type
+	if tokenType == "lt" {
+		data.Set("lt", authToken)
+	} else {
+		data.Set("_csrf", authToken)
+	}
 	data.Set("_eventId", "submit")
 	data.Set("geolocation", "")
 	data.Set("clientId", "GarminConnect")
@@ -450,29 +484,32 @@ func extractParam(pattern, body string) (string, error) {
 
 // getCSRFToken extracts the CSRF token from HTML using multiple patterns
 func getCSRFToken(html string) (string, error) {
-	// Try different patterns in order of likelihood
+	// Priority order based on what Garmin actually uses
 	patterns := []string{
-		`"csrfToken":"([^"]+)"`,                       // JSON embedded pattern
-		`name=["']_csrf["']\s+value=["']([^"']+)["']`, // Flexible quotes
-		`value=["']([^"']+)["']\s+name=["']_csrf["']`, // Reversed attributes
-		`name="_csrf"\s+value="([^"]+)"`,              // Standard pattern
-		`id="__csrf"\s+value="([^"]+)"`,               // Alternative ID pattern
+		// 1. Login Ticket (lt) - PRIMARY pattern used by Garmin
+		`name="lt"\s+value="([^"]+)"`,
+		`name="lt"\s+type="hidden"\s+value="([^"]+)"`,
+		`<input[^>]*name="lt"[^>]*value="([^"]+)"[^>]*>`,
+
+		// 2. CSRF tokens (backup patterns)
+		`name="_csrf"\s+value="([^"]+)"`,
+		`"csrfToken":"([^"]+)"`,
+
+		// 3. Other possible patterns
+		`name=["']_csrf["']\s+value=["']([^"']+)["']`,
+		`value=["']([^"']+)["']\s+name=["']_csrf["']`,
+		`id="__csrf"\s+value="([^"]+)"`,
 	}
 
 	for _, pattern := range patterns {
-		token, err := extractParam(pattern, html)
-		if err == nil {
-			return token, nil
+		re := regexp.MustCompile(pattern)
+		matches := re.FindStringSubmatch(html)
+		if len(matches) > 1 {
+			return matches[1], nil
 		}
 	}
 
-	// Try to extract from JSON structure
-	token, err := extractFromJSON(html)
-	if err == nil {
-		return token, nil
-	}
-
-	return "", errors.New("all CSRF extraction methods failed")
+	return "", errors.New("no authentication token found")
 }
 
 // extractFromJSON tries to find the CSRF token in a JSON structure
