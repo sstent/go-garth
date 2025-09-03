@@ -9,8 +9,8 @@ import (
 )
 
 func main() {
-	// Create a new client
-	client := garth.New()
+	// Create a new client (placeholder - actual client creation depends on package structure)
+	// client := garth.NewClient(nil)
 
 	// For demonstration, we'll use a mock server or skip authentication
 	// In real usage, you would authenticate first:
@@ -42,11 +42,30 @@ func main() {
 	// List workouts with options
 	opts := garth.WorkoutListOptions{
 		Limit:     10,
+		Offset:    0,
 		StartDate: time.Now().AddDate(0, -1, 0), // Last month
 		EndDate:   time.Now(),
+		SortBy:    "createdDate",
+		SortOrder: "desc",
 	}
 
 	fmt.Printf("Workout list options: %+v\n", opts)
+
+	// List workouts with pagination
+	paginatedOpts := garth.WorkoutListOptions{
+		Limit:  5,
+		Offset: 10,
+		SortBy: "name",
+	}
+	fmt.Printf("Paginated workout options: %+v\n", paginatedOpts)
+
+	// List workouts with type and status filters
+	filteredOpts := garth.WorkoutListOptions{
+		Type:   "running",
+		Status: "active",
+		Limit:  20,
+	}
+	fmt.Printf("Filtered workout options: %+v\n", filteredOpts)
 
 	// Get workout details
 	workoutID := "12345"

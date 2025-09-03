@@ -51,6 +51,53 @@ func TestWorkoutService_List(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "successful list with pagination",
+			mockResponse: []Workout{
+				{ID: "2", Name: "Evening Ride", Type: "cycling"},
+			},
+			mockStatusCode: http.StatusOK,
+			opts: WorkoutListOptions{
+				Limit:  1,
+				Offset: 1,
+			},
+			wantErr: false,
+		},
+		{
+			name: "successful list with sorting",
+			mockResponse: []Workout{
+				{ID: "1", Name: "Morning Run", Type: "running"},
+				{ID: "2", Name: "Evening Ride", Type: "cycling"},
+			},
+			mockStatusCode: http.StatusOK,
+			opts: WorkoutListOptions{
+				SortBy:    "createdDate",
+				SortOrder: "desc",
+			},
+			wantErr: false,
+		},
+		{
+			name: "successful list with type filter",
+			mockResponse: []Workout{
+				{ID: "1", Name: "Morning Run", Type: "running"},
+			},
+			mockStatusCode: http.StatusOK,
+			opts: WorkoutListOptions{
+				Type: "running",
+			},
+			wantErr: false,
+		},
+		{
+			name: "successful list with status filter",
+			mockResponse: []Workout{
+				{ID: "1", Name: "Morning Run", Type: "running"},
+			},
+			mockStatusCode: http.StatusOK,
+			opts: WorkoutListOptions{
+				Status: "active",
+			},
+			wantErr: false,
+		},
+		{
 			name:           "server error",
 			mockResponse:   nil,
 			mockStatusCode: http.StatusInternalServerError,

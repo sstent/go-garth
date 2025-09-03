@@ -85,6 +85,11 @@ type WorkoutListOptions struct {
 	SportType    string
 	NameContains string
 	OwnerID      int64
+	Offset       int
+	SortBy       string
+	SortOrder    string
+	Type         string
+	Status       string
 }
 
 // WorkoutUpdate represents fields that can be updated on a workout
@@ -102,6 +107,9 @@ func (s *WorkoutService) List(ctx context.Context, opts WorkoutListOptions) ([]W
 	if opts.Limit > 0 {
 		params.Set("limit", strconv.Itoa(opts.Limit))
 	}
+	if opts.Offset > 0 {
+		params.Set("offset", strconv.Itoa(opts.Offset))
+	}
 	if !opts.StartDate.IsZero() {
 		params.Set("startDate", opts.StartDate.Format(time.RFC3339))
 	}
@@ -111,11 +119,23 @@ func (s *WorkoutService) List(ctx context.Context, opts WorkoutListOptions) ([]W
 	if opts.SportType != "" {
 		params.Set("sportType", opts.SportType)
 	}
+	if opts.Type != "" {
+		params.Set("type", opts.Type)
+	}
+	if opts.Status != "" {
+		params.Set("status", opts.Status)
+	}
 	if opts.NameContains != "" {
 		params.Set("nameContains", opts.NameContains)
 	}
 	if opts.OwnerID > 0 {
 		params.Set("ownerId", strconv.FormatInt(opts.OwnerID, 10))
+	}
+	if opts.SortBy != "" {
+		params.Set("sortBy", opts.SortBy)
+	}
+	if opts.SortOrder != "" {
+		params.Set("sortOrder", opts.SortOrder)
 	}
 
 	path := "/workout-service/workouts"

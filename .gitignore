@@ -1,0 +1,14 @@
+# Ignore environment files
+.env
+
+# IDE files
+.vscode/
+.idea/
+
+# Build artifacts
+bin/
+dist/
+
+# OS files
+.DS_Store
+Thumbs.db

@@ -72,13 +72,18 @@ type WorkoutExercise struct {
 ```go
 type WorkoutListOptions struct {
     Limit        int
+    Offset       int
     StartDate    time.Time
     EndDate      time.Time
     WorkoutType  string
+    Type         string
+    Status       string
     SportType    string
     NameContains string
     OwnerID      int64
     IsPublic     *bool
+    SortBy       string
+    SortOrder    string
 }
 ```
 
