@@ -19,12 +19,12 @@ import (
 
 // GarthAuthenticator implements the Authenticator interface
 type GarthAuthenticator struct {
-	client    *http.Client
-	tokenURL  string
-	storage   TokenStorage
-	userAgent string
-	// Add CSRF token for session management
-	csrfToken string
+	client      *http.Client
+	tokenURL    string
+	storage     TokenStorage
+	userAgent   string
+	csrfToken   string
+	oauth1Token string // Add OAuth1 token storage
 }
 
 // NewAuthenticator creates a new Garth authentication client
@@ -74,10 +74,12 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 
 // Login authenticates with Garmin services
 func (a *GarthAuthenticator) Login(ctx context.Context, username, password, mfaToken string) (*Token, error) {
-	// Fetch OAuth1 token to initialize session
-	if _, err := a.fetchOAuth1Token(ctx); err != nil {
+	// Fetch and store OAuth1 token to initialize session
+	oauth1Token, err := a.fetchOAuth1Token(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("failed to get OAuth1 token: %w", err)
 	}
+	a.oauth1Token = oauth1Token
 
 	// Get login parameters including CSRF token
 	authToken, tokenType, err := a.fetchLoginParams(ctx)
@@ -215,7 +217,7 @@ func (a *GarthAuthenticator) fetchLoginParams(ctx context.Context) (token string
 	bodyStr := string(body)
 
 	// Use our robust CSRF token extractor with multiple patterns
-	token, err = getCSRFToken(bodyStr)
+	token, tokenType, err = getCSRFTokenWithType(bodyStr)
 	if err != nil {
 		filename := fmt.Sprintf("login_page_%d.html", time.Now().Unix())
 		if writeErr := os.WriteFile(filename, body, 0644); writeErr == nil {
@@ -224,11 +226,7 @@ func (a *GarthAuthenticator) fetchLoginParams(ctx context.Context) (token string
 		return "", "", fmt.Errorf("authentication token not found: %w (failed to save HTML for debugging)", err)
 	}
 
-	// Determine token type (lt or _csrf)
-	if strings.Contains(token, "LT-") {
-		return token, "lt", nil
-	}
-	return token, "_csrf", nil
+	return token, tokenType, nil
 }
 
 // buildLoginURL constructs the complete login URL with parameters
@@ -328,7 +326,8 @@ func (a *GarthAuthenticator) authenticate(ctx context.Context, username, passwor
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusPreconditionFailed {
-		return a.handleMFA(ctx, username, password, mfaToken, "")
+		body, _ := io.ReadAll(resp.Body)
+		return a.handleMFA(ctx, username, password, mfaToken, string(body))
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -484,32 +483,42 @@ func extractParam(pattern, body string) (string, error) {
 
 // getCSRFToken extracts the CSRF token from HTML using multiple patterns
 func getCSRFToken(html string) (string, error) {
-	// Priority order based on what Garmin actually uses
-	patterns := []string{
-		// 1. Login Ticket (lt) - PRIMARY pattern used by Garmin
+	token, _, err := getCSRFTokenWithType(html)
+	return token, err
+}
+
+// getCSRFTokenWithType returns token and its type (lt or _csrf)
+func getCSRFTokenWithType(html string) (string, string, error) {
+	// Check lt patterns first
+	ltPatterns := []string{
 		`name="lt"\s+value="([^"]+)"`,
 		`name="lt"\s+type="hidden"\s+value="([^"]+)"`,
 		`<input[^>]*name="lt"[^>]*value="([^"]+)"[^>]*>`,
-
-		// 2. CSRF tokens (backup patterns)
-		`name="_csrf"\s+value="([^"]+)"`,
-		`"csrfToken":"([^"]+)"`,
-
-		// 3. Other possible patterns
-		`name=["']_csrf["']\s+value=["']([^"']+)["']`,
-		`value=["']([^"']+)["']\s+name=["']_csrf["']`,
-		`id="__csrf"\s+value="([^"]+)"`,
 	}
 
-	for _, pattern := range patterns {
+	for _, pattern := range ltPatterns {
 		re := regexp.MustCompile(pattern)
 		matches := re.FindStringSubmatch(html)
 		if len(matches) > 1 {
-			return matches[1], nil
+			return matches[1], "lt", nil
 		}
 	}
 
-	return "", errors.New("no authentication token found")
+	// Check CSRF patterns
+	csrfPatterns := []string{
+		`name="_csrf"\s+value="([^"]+)"`,
+		`"csrfToken":"([^"]+)"`,
+	}
+
+	for _, pattern := range csrfPatterns {
+		re := regexp.MustCompile(pattern)
+		matches := re.FindStringSubmatch(html)
+		if len(matches) > 1 {
+			return matches[1], "_csrf", nil
+		}
+	}
+
+	return "", "", errors.New("no authentication token found")
 }
 
 // extractFromJSON tries to find the CSRF token in a JSON structure
