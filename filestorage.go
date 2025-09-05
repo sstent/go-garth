@@ -1,53 +1,34 @@
 package garth
 
 import (
-	"context"
 	"encoding/json"
 	"os"
-	"path/filepath"
+	"sync"
 )
 
-// fileStorage implements TokenStorage using a file
-type fileStorage struct {
+// FileStorage implements TokenStorage using a JSON file
+type FileStorage struct {
+	mu   sync.RWMutex
 	path string
-	auth Authenticator // Reference to authenticator for token refreshes
 }
 
 // NewFileStorage creates a new file-based token storage
-func NewFileStorage(path string) TokenStorage {
-	return &fileStorage{path: path}
-}
-
-// SetAuthenticator sets the authenticator for token refreshes
-func (s *fileStorage) SetAuthenticator(a Authenticator) {
-	s.auth = a
-}
-
-// GetToken retrieves token from file, refreshing if expired
-func (s *fileStorage) GetToken() (*Token, error) {
-	token, err := s.loadToken()
-	if err != nil {
-		return nil, err
+func NewFileStorage(path string) *FileStorage {
+	return &FileStorage{
+		path: path,
 	}
-
-	// Refresh token if expired
-	if token.IsExpired() {
-		refreshed, err := s.auth.RefreshToken(context.Background(), token.RefreshToken)
-		if err != nil {
-			return nil, err
-		}
-		if err := s.SaveToken(refreshed); err != nil {
-			return nil, err
-		}
-		return refreshed, nil
-	}
-	return token, nil
 }
 
-// loadToken loads token from file without refreshing
-func (s *fileStorage) loadToken() (*Token, error) {
+// GetToken retrieves token from file
+func (s *FileStorage) GetToken() (*Token, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
 	data, err := os.ReadFile(s.path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrTokenNotFound
+		}
 		return nil, err
 	}
 
@@ -55,21 +36,13 @@ func (s *fileStorage) loadToken() (*Token, error) {
 	if err := json.Unmarshal(data, &token); err != nil {
 		return nil, err
 	}
-
-	if token.AccessToken == "" || token.RefreshToken == "" {
-		return nil, os.ErrNotExist
-	}
-
 	return &token, nil
 }
 
-// SaveToken saves token to file
-func (s *fileStorage) SaveToken(token *Token) error {
-	// Create directory if needed
-	dir := filepath.Dir(s.path)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
+// StoreToken saves token to file
+func (s *FileStorage) StoreToken(token *Token) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
 	data, err := json.MarshalIndent(token, "", "  ")
 	if err != nil {
@@ -77,4 +50,15 @@ func (s *fileStorage) SaveToken(token *Token) error {
 	}
 
 	return os.WriteFile(s.path, data, 0600)
+}
+
+// ClearToken removes the token file
+func (s *FileStorage) ClearToken() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }

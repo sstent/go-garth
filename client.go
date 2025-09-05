@@ -16,10 +16,14 @@ type AuthTransport struct {
 	mutex     sync.Mutex // Protects refreshing token
 }
 
-// NewAuthTransport creates a new authenticated transport
+// NewAuthTransport creates a new authenticated transport with specified storage
 func NewAuthTransport(auth *GarthAuthenticator, storage TokenStorage, base http.RoundTripper) *AuthTransport {
 	if base == nil {
 		base = http.DefaultTransport
+	}
+
+	if storage == nil {
+		storage = NewFileStorage("garmin_session.json")
 	}
 
 	return &AuthTransport{
@@ -55,7 +59,7 @@ func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	// Add Authorization header
-	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+token.OAuth2.AccessToken)
 	req.Header.Set("User-Agent", t.userAgent)
 
 	// Execute request with retry logic
@@ -80,7 +84,7 @@ func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			if err != nil {
 				return nil, err
 			}
-			req.Header.Set("Authorization", "Bearer "+token.AccessToken)
+			req.Header.Set("Authorization", "Bearer "+token.OAuth2.AccessToken)
 			continue
 		}
 
@@ -118,17 +122,27 @@ func (t *AuthTransport) refreshToken(ctx context.Context, token *Token) (*Token,
 	}
 
 	// Perform refresh
-	newToken, err := t.auth.RefreshToken(ctx, token.RefreshToken)
+	newToken, err := t.auth.RefreshToken(ctx, token.OAuth2.RefreshToken)
 	if err != nil {
 		return nil, err
 	}
 
 	// Save new token
-	if err := t.storage.SaveToken(newToken); err != nil {
+	if err := t.storage.StoreToken(newToken); err != nil {
 		return nil, err
 	}
 
 	return newToken, nil
+}
+
+// NewDefaultAuthTransport creates a transport with persistent storage
+func NewDefaultAuthTransport(auth *GarthAuthenticator) *AuthTransport {
+	return NewAuthTransport(auth, NewFileStorage("garmin_session.json"), nil)
+}
+
+// NewMemoryAuthTransport creates a transport with in-memory storage (for testing)
+func NewMemoryAuthTransport(auth *GarthAuthenticator) *AuthTransport {
+	return NewAuthTransport(auth, NewMemoryStorage(), nil)
 }
 
 // cloneRequest returns a clone of the provided HTTP request

@@ -22,8 +22,8 @@ func TestWorkoutService_List(t *testing.T) {
 		{
 			name: "successful list with no options",
 			mockResponse: []Workout{
-				{ID: "1", Name: "Morning Run", Type: "running"},
-				{ID: "2", Name: "Evening Ride", Type: "cycling"},
+				{WorkoutID: 1, Name: "Morning Run", Type: "running"},
+				{WorkoutID: 2, Name: "Evening Ride", Type: "cycling"},
 			},
 			mockStatusCode: http.StatusOK,
 			opts:           WorkoutListOptions{},
@@ -32,7 +32,7 @@ func TestWorkoutService_List(t *testing.T) {
 		{
 			name: "successful list with limit",
 			mockResponse: []Workout{
-				{ID: "1", Name: "Morning Run", Type: "running"},
+				{WorkoutID: 1, Name: "Morning Run", Type: "running"},
 			},
 			mockStatusCode: http.StatusOK,
 			opts:           WorkoutListOptions{Limit: 1},
@@ -41,7 +41,7 @@ func TestWorkoutService_List(t *testing.T) {
 		{
 			name: "successful list with date range",
 			mockResponse: []Workout{
-				{ID: "1", Name: "Morning Run", Type: "running"},
+				{WorkoutID: 1, Name: "Morning Run", Type: "running"},
 			},
 			mockStatusCode: http.StatusOK,
 			opts: WorkoutListOptions{
@@ -53,7 +53,7 @@ func TestWorkoutService_List(t *testing.T) {
 		{
 			name: "successful list with pagination",
 			mockResponse: []Workout{
-				{ID: "2", Name: "Evening Ride", Type: "cycling"},
+				{WorkoutID: 2, Name: "Evening Ride", Type: "cycling"},
 			},
 			mockStatusCode: http.StatusOK,
 			opts: WorkoutListOptions{
@@ -65,8 +65,8 @@ func TestWorkoutService_List(t *testing.T) {
 		{
 			name: "successful list with sorting",
 			mockResponse: []Workout{
-				{ID: "1", Name: "Morning Run", Type: "running"},
-				{ID: "2", Name: "Evening Ride", Type: "cycling"},
+				{WorkoutID: 1, Name: "Morning Run", Type: "running"},
+				{WorkoutID: 2, Name: "Evening Ride", Type: "cycling"},
 			},
 			mockStatusCode: http.StatusOK,
 			opts: WorkoutListOptions{
@@ -78,7 +78,7 @@ func TestWorkoutService_List(t *testing.T) {
 		{
 			name: "successful list with type filter",
 			mockResponse: []Workout{
-				{ID: "1", Name: "Morning Run", Type: "running"},
+				{WorkoutID: 1, Name: "Morning Run", Type: "running"},
 			},
 			mockStatusCode: http.StatusOK,
 			opts: WorkoutListOptions{
@@ -89,7 +89,7 @@ func TestWorkoutService_List(t *testing.T) {
 		{
 			name: "successful list with status filter",
 			mockResponse: []Workout{
-				{ID: "1", Name: "Morning Run", Type: "running"},
+				{WorkoutID: 1, Name: "Morning Run", Type: "running"},
 			},
 			mockStatusCode: http.StatusOK,
 			opts: WorkoutListOptions{
@@ -150,12 +150,12 @@ func TestWorkoutService_Get(t *testing.T) {
 			workoutID: "123",
 			mockResponse: &WorkoutDetails{
 				Workout: Workout{
-					ID:   "123",
-					Name: "Test Workout",
-					Type: "running",
+					WorkoutID: 123,
+					Name:      "Test Workout",
+					Type:      "running",
 				},
-				EstimatedDuration:   3600,
-				TrainingStressScore: 50.5,
+				EstimatedDuration: 3600,
+				TrainingLoad:      50.5,
 			},
 			mockStatusCode: http.StatusOK,
 			wantErr:        false,
@@ -193,8 +193,8 @@ func TestWorkoutService_Get(t *testing.T) {
 				return
 			}
 
-			if !tt.wantErr && workout.ID != tt.workoutID {
-				t.Errorf("WorkoutService.Get() got ID %s, want %s", workout.ID, tt.workoutID)
+			if !tt.wantErr && workout.WorkoutID != 123 {
+				t.Errorf("WorkoutService.Get() got ID %d, want 123", workout.WorkoutID)
 			}
 		})
 	}
@@ -217,7 +217,7 @@ func TestWorkoutService_Create(t *testing.T) {
 				Type:        "cycling",
 			},
 			mockResponse: &Workout{
-				ID:          "456",
+				WorkoutID:   456,
 				Name:        "New Workout",
 				Description: "Test workout",
 				Type:        "cycling",
@@ -288,7 +288,7 @@ func TestWorkoutService_Update(t *testing.T) {
 				Description: "Updated description",
 			},
 			mockResponse: &Workout{
-				ID:          "123",
+				WorkoutID:   123,
 				Name:        "Updated Workout",
 				Description: "Updated description",
 			},
@@ -402,8 +402,8 @@ func TestWorkoutService_SearchWorkouts(t *testing.T) {
 			query: "running",
 			limit: 10,
 			mockResponse: []Workout{
-				{ID: "1", Name: "Morning Run", Type: "running"},
-				{ID: "2", Name: "Evening Run", Type: "running"},
+				{WorkoutID: 1, Name: "Morning Run", Type: "running"},
+				{WorkoutID: 2, Name: "Evening Run", Type: "running"},
 			},
 			mockStatusCode: http.StatusOK,
 			wantErr:        false,
@@ -459,8 +459,8 @@ func TestWorkoutService_GetWorkoutTemplates(t *testing.T) {
 		{
 			name: "successful get templates",
 			mockResponse: []Workout{
-				{ID: "1", Name: "Template 1", Type: "running"},
-				{ID: "2", Name: "Template 2", Type: "cycling"},
+				{WorkoutID: 1, Name: "Template 1", Type: "running"},
+				{WorkoutID: 2, Name: "Template 2", Type: "cycling"},
 			},
 			mockStatusCode: http.StatusOK,
 			wantErr:        false,
@@ -518,8 +518,8 @@ func TestWorkoutService_CopyWorkout(t *testing.T) {
 			workoutID: "123",
 			newName:   "Copied Workout",
 			mockResponse: &Workout{
-				ID:   "456",
-				Name: "Copied Workout",
+				WorkoutID: 456,
+				Name:      "Copied Workout",
 			},
 			mockStatusCode: http.StatusCreated,
 			wantErr:        false,
@@ -652,7 +652,7 @@ func TestWorkoutService_ContextMethods(t *testing.T) {
 	t.Run("Create with context", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(&Workout{ID: "123", Name: "Test Workout"})
+			json.NewEncoder(w).Encode(&Workout{WorkoutID: 123, Name: "Test Workout"})
 		}))
 		defer server.Close()
 
@@ -665,8 +665,8 @@ func TestWorkoutService_ContextMethods(t *testing.T) {
 			return
 		}
 
-		if workout.ID != "123" {
-			t.Errorf("Create() got ID %s, want 123", workout.ID)
+		if workout.WorkoutID != 123 {
+			t.Errorf("Create() got ID %d, want 123", workout.WorkoutID)
 		}
 	})
 
@@ -674,7 +674,7 @@ func TestWorkoutService_ContextMethods(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(&WorkoutDetails{
-				Workout: Workout{ID: "123", Name: "Test Workout"},
+				Workout: Workout{WorkoutID: 123, Name: "Test Workout"},
 			})
 		}))
 		defer server.Close()
@@ -688,15 +688,15 @@ func TestWorkoutService_ContextMethods(t *testing.T) {
 			return
 		}
 
-		if workout.ID != "123" {
-			t.Errorf("Get() got ID %s, want 123", workout.ID)
+		if workout.WorkoutID != 123 {
+			t.Errorf("Get() got ID %d, want 123", workout.WorkoutID)
 		}
 	})
 
 	t.Run("Update with context", func(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			json.NewEncoder(w).Encode(&Workout{ID: "123", Name: "Updated Workout"})
+			json.NewEncoder(w).Encode(&Workout{WorkoutID: 123, Name: "Updated Workout"})
 		}))
 		defer server.Close()
 

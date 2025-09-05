@@ -32,6 +32,7 @@ package garth
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -40,11 +41,14 @@ import (
 
 // Authenticator defines the authentication interface
 type Authenticator interface {
-	// Login authenticates with Garmin services
+	// Login authenticates with Garmin services using OAuth1/OAuth2 hybrid flow
 	Login(ctx context.Context, username, password, mfaToken string) (*Token, error)
 
-	// RefreshToken refreshes an expired access token
+	// RefreshToken refreshes an expired OAuth2 access token
 	RefreshToken(ctx context.Context, refreshToken string) (*Token, error)
+
+	// ExchangeToken exchanges OAuth1 token for OAuth2 token
+	ExchangeToken(ctx context.Context, oauth1Token *OAuth1Token) (*Token, error)
 
 	// GetClient returns an authenticated HTTP client
 	GetClient() *http.Client
@@ -52,24 +56,38 @@ type Authenticator interface {
 
 // ClientOptions configures the Authenticator
 type ClientOptions struct {
-	TokenURL string        // Token exchange endpoint
-	Storage  TokenStorage  // Token storage implementation
-	Timeout  time.Duration // HTTP client timeout
+	SSOURL    string        // SSO endpoint
+	TokenURL  string        // Token exchange endpoint
+	Storage   TokenStorage  // Token storage implementation
+	Timeout   time.Duration // HTTP client timeout
+	Domain    string        // Garmin domain (default: garmin.com)
+	UserAgent string        // User-Agent header (default: GCMv3)
 }
 
 // NewClientOptionsFromEnv creates ClientOptions from environment variables
 func NewClientOptionsFromEnv() ClientOptions {
 	// Default configuration
 	opts := ClientOptions{
-		TokenURL: "https://connectapi.garmin.com/oauth-service/oauth/token",
-		Timeout:  30 * time.Second,
+		SSOURL:    "https://sso.garmin.com/sso",
+		TokenURL:  "https://connectapi.garmin.com/oauth-service",
+		Domain:    "garmin.com",
+		UserAgent: "GCMv3",
+		Timeout:   30 * time.Second,
 	}
 
 	// Override from environment variables
+	if url := os.Getenv("GARTH_SSO_URL"); url != "" {
+		opts.SSOURL = url
+	}
 	if url := os.Getenv("GARTH_TOKEN_URL"); url != "" {
 		opts.TokenURL = url
 	}
-
+	if domain := os.Getenv("GARTH_DOMAIN"); domain != "" {
+		opts.Domain = domain
+	}
+	if ua := os.Getenv("GARTH_USER_AGENT"); ua != "" {
+		opts.UserAgent = ua
+	}
 	if timeoutStr := os.Getenv("GARTH_TIMEOUT"); timeoutStr != "" {
 		if timeout, err := strconv.Atoi(timeoutStr); err == nil {
 			opts.Timeout = time.Duration(timeout) * time.Second
@@ -80,4 +98,17 @@ func NewClientOptionsFromEnv() ClientOptions {
 	opts.Storage = NewMemoryStorage()
 
 	return opts
+}
+
+// getRequestToken retrieves OAuth1 request token
+// getRequestToken retrieves OAuth1 request token
+func getRequestToken(a Authenticator, ctx context.Context) (*OAuth1Token, error) {
+	// Implementation will be added in next step
+	return nil, errors.New("not implemented")
+}
+
+// authorizeRequestToken authorizes OAuth1 token through SSO
+func authorizeRequestToken(a Authenticator, ctx context.Context, token *OAuth1Token) error {
+	// Implementation will be added in next step
+	return errors.New("not implemented")
 }

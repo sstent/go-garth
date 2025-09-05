@@ -2,57 +2,68 @@ package garth
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha1"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
-	"net/http/cookiejar" // Add cookiejar import
+	"net/http/cookiejar"
 )
 
-// GarthAuthenticator implements the Authenticator interface
 type GarthAuthenticator struct {
 	client      *http.Client
 	tokenURL    string
 	storage     TokenStorage
 	userAgent   string
 	csrfToken   string
-	oauth1Token string // Add OAuth1 token storage
+	oauth1Token string
+	domain      string
 }
 
-// NewAuthenticator creates a new Garth authentication client
 func NewAuthenticator(opts ClientOptions) Authenticator {
-	// Create HTTP client with browser-like settings
-	transport := &http.Transport{
+	// Set default domain if not provided
+	if opts.Domain == "" {
+		opts.Domain = "garmin.com"
+	}
+	baseTransport := &http.Transport{
 		TLSClientConfig: &tls.Config{
 			MinVersion: tls.VersionTLS12,
 		},
 		Proxy: http.ProxyFromEnvironment,
 	}
 
-	// Create cookie jar for session persistence
 	jar, err := cookiejar.New(nil)
 	if err != nil {
-		// Fallback to no cookie jar if creation fails
 		jar = nil
 	}
 
 	client := &http.Client{
 		Timeout:   opts.Timeout,
-		Transport: transport,
-		Jar:       jar, // Add cookie jar
+		Transport: baseTransport,
+		Jar:       jar,
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// Allow up to 10 redirects
 			if len(via) >= 10 {
 				return errors.New("stopped after 10 redirects")
+			}
+			if jar != nil {
+				for _, v := range via {
+					if v.Response != nil {
+						if cookies := v.Response.Cookies(); len(cookies) > 0 {
+							jar.SetCookies(req.URL, cookies)
+						}
+					}
+				}
 			}
 			return nil
 		},
@@ -63,135 +74,264 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 		tokenURL:  opts.TokenURL,
 		storage:   opts.Storage,
 		userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		domain:    opts.Domain,
 	}
 
-	// Set authenticator reference in storage if needed
-	if setter, ok := opts.Storage.(AuthenticatorSetter); ok {
+	if setter, ok := opts.Storage.(interface{ SetAuthenticator(a Authenticator) }); ok {
 		setter.SetAuthenticator(auth)
 	}
 
 	return auth
 }
 
-// Login authenticates with Garmin services
 func (a *GarthAuthenticator) Login(ctx context.Context, username, password, mfaToken string) (*Token, error) {
-	// Step 1: Get OAuth1 token FIRST
-	oauth1Token, err := a.fetchOAuth1Token(ctx)
+	// Step 1: Get OAuth1 request token
+	oauth1RequestToken, err := a.fetchOAuth1RequestToken(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get OAuth1 token: %w", err)
-	}
-	a.oauth1Token = oauth1Token
-
-	// Step 2: Now get login parameters with OAuth1 context
-	authToken, tokenType, err := a.fetchLoginParamsWithOAuth1(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get login params: %w", err)
+		return nil, fmt.Errorf("failed to get OAuth1 request token: %w", err)
 	}
 
-	a.csrfToken = authToken // Store for session
+	// Step 2: Authorize OAuth1 request token
+	authToken, tokenType, err := a.authorizeOAuth1Token(ctx, oauth1RequestToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to authorize OAuth1 token: %w", err)
+	}
+	a.csrfToken = authToken
 
-	// Step 3: Authenticate with all tokens
-	token, err := a.authenticate(ctx, username, password, mfaToken, authToken, tokenType)
+	// Step 3: Authenticate with credentials to get service ticket
+	serviceTicket, err := a.authenticate(ctx, username, password, mfaToken, authToken, tokenType)
 	if err != nil {
 		return nil, err
 	}
 
-	// Save token to storage
-	if err := a.storage.SaveToken(token); err != nil {
+	// Step 4: Exchange service ticket for OAuth1 access token
+	oauth1AccessToken, err := a.exchangeTicketForOAuth1Token(ctx, serviceTicket)
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange ticket for OAuth1 access token: %w", err)
+	}
+
+	// Step 5: Exchange OAuth1 access token for OAuth2 token
+	token, err := a.exchangeOAuth1ForOAuth2Token(ctx, oauth1AccessToken)
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange OAuth1 for OAuth2 token: %w", err)
+	}
+
+	if err := a.storage.StoreToken(token); err != nil {
 		return nil, fmt.Errorf("failed to save token: %w", err)
 	}
 
 	return token, nil
 }
 
-// RefreshToken refreshes an expired access token
-func (a *GarthAuthenticator) RefreshToken(ctx context.Context, refreshToken string) (*Token, error) {
-	if refreshToken == "" {
-		return nil, &AuthError{
-			StatusCode: http.StatusBadRequest,
-			Message:    "Refresh token is required",
-			Type:       "invalid_request",
-		}
-	}
-
-	data := url.Values{}
-	data.Set("grant_type", "refresh_token")
-	data.Set("refresh_token", refreshToken)
-
-	req, err := http.NewRequestWithContext(ctx, "POST", a.tokenURL, strings.NewReader(data.Encode()))
+func (a *GarthAuthenticator) fetchOAuth1RequestToken(ctx context.Context) (*OAuth1Token, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", fmt.Sprintf("https://connectapi.%s/oauth-service/oauth/request_token", a.domain), nil)
 	if err != nil {
-		return nil, &AuthError{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "Failed to create refresh request",
-			Cause:      err,
-		}
+		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", a.userAgent)
-	req.SetBasicAuth("garmin-connect", "garmin-connect-secret")
+
+	// Sign request with OAuth1 consumer credentials
+	req.Header.Set("Authorization", a.buildOAuth1Header(req, nil, ""))
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return nil, &AuthError{
-			StatusCode: http.StatusBadGateway,
-			Message:    "Refresh request failed",
-			Cause:      err,
-		}
+		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, &AuthError{
-			StatusCode: resp.StatusCode,
-			Message:    fmt.Sprintf("Token refresh failed: %s", body),
-			Type:       "token_refresh_failure",
-		}
+		return nil, fmt.Errorf("request failed with status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	values, err := url.ParseQuery(string(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &OAuth1Token{
+		Token:  values.Get("oauth_token"),
+		Secret: values.Get("oauth_token_secret"),
+	}, nil
+}
+
+func (a *GarthAuthenticator) authorizeOAuth1Token(ctx context.Context, token *OAuth1Token) (string, string, error) {
+	params := url.Values{}
+	params.Set("oauth_token", token.Token)
+	authURL := fmt.Sprintf("https://connect.%s/oauthConfirm?%s", a.domain, params.Encode())
+
+	req, err := http.NewRequestWithContext(ctx, "GET", authURL, nil)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create authorization request: %w", err)
+	}
+
+	req.Header = a.getEnhancedBrowserHeaders(authURL)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("authorization request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read authorization response: %w", err)
+	}
+
+	return getCSRFToken(string(body))
+}
+
+func (a *GarthAuthenticator) exchangeTicketForOAuth1Token(ctx context.Context, ticket string) (*OAuth1Token, error) {
+	data := url.Values{}
+	data.Set("oauth_verifier", ticket)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("https://connectapi.%s/oauth-service/oauth/access_token", a.domain), strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create access token request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Authorization", a.buildOAuth1Header(req, nil, ""))
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("access token request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("access token request failed with status: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read access token response: %w", err)
+	}
+
+	values, err := url.ParseQuery(string(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse access token response: %w", err)
+	}
+
+	return &OAuth1Token{
+		Token:  values.Get("oauth_token"),
+		Secret: values.Get("oauth_token_secret"),
+	}, nil
+}
+
+func (a *GarthAuthenticator) exchangeOAuth1ForOAuth2Token(ctx context.Context, oauth1Token *OAuth1Token) (*Token, error) {
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("https://connectapi.%s/oauth-service/oauth/exchange_token", a.domain), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create token exchange request: %w", err)
+	}
+
+	req.Header.Set("Authorization", a.buildOAuth1Header(req, oauth1Token, ""))
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("token exchange request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("token exchange failed with status: %d", resp.StatusCode)
 	}
 
 	var token Token
 	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
-		return nil, &AuthError{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "Failed to parse token response",
-			Cause:      err,
-		}
+		return nil, fmt.Errorf("failed to parse token response: %w", err)
 	}
 
-	token.Expiry = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
-
-	// Persist the refreshed token to storage
-	if err := a.storage.SaveToken(&token); err != nil {
-		return nil, fmt.Errorf("failed to save refreshed token: %w", err)
+	if token.OAuth2 != nil {
+		token.OAuth2.Expiry = time.Now().Add(time.Duration(token.OAuth2.ExpiresIn) * time.Second)
 	}
-
+	token.OAuth1 = oauth1Token
 	return &token, nil
 }
 
-// GetClient returns an authenticated HTTP client
-func (a *GarthAuthenticator) GetClient() *http.Client {
-	// This would be a client with middleware that automatically
-	// adds authentication headers and handles token refresh
-	return a.client
+func (a *GarthAuthenticator) buildOAuth1Header(req *http.Request, token *OAuth1Token, callback string) string {
+	oauthParams := url.Values{}
+	oauthParams.Set("oauth_consumer_key", "fc020df2-e33d-4ec5-987a-7fb6de2e3850")
+	oauthParams.Set("oauth_signature_method", "HMAC-SHA1")
+	oauthParams.Set("oauth_timestamp", fmt.Sprintf("%d", time.Now().Unix()))
+	oauthParams.Set("oauth_nonce", fmt.Sprintf("%d", rand.Int63()))
+	oauthParams.Set("oauth_version", "1.0")
+
+	if token != nil {
+		oauthParams.Set("oauth_token", token.Token)
+	}
+	if callback != "" {
+		oauthParams.Set("oauth_callback", callback)
+	}
+
+	// Generate signature
+	baseString := a.buildSignatureBaseString(req, oauthParams)
+	signingKey := url.QueryEscape("secret_key_from_mobile_app") + "&"
+	if token != nil {
+		signingKey += url.QueryEscape(token.Secret)
+	}
+
+	mac := hmac.New(sha1.New, []byte(signingKey))
+	mac.Write([]byte(baseString))
+	signature := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+	oauthParams.Set("oauth_signature", signature)
+
+	// Build header
+	params := make([]string, 0, len(oauthParams))
+	for k, v := range oauthParams {
+		params = append(params, fmt.Sprintf(`%s="%s"`, k, url.QueryEscape(v[0])))
+	}
+	sort.Strings(params)
+
+	return "OAuth " + strings.Join(params, ", ")
 }
 
-// fetchLoginParamsWithOAuth1 retrieves login parameters with OAuth1 context
+func (a *GarthAuthenticator) buildSignatureBaseString(req *http.Request, oauthParams url.Values) string {
+	method := strings.ToUpper(req.Method)
+	baseURL := req.URL.Scheme + "://" + req.URL.Host + req.URL.Path
+
+	// Collect all parameters
+	params := url.Values{}
+	for k, v := range req.URL.Query() {
+		params[k] = v
+	}
+	for k, v := range oauthParams {
+		params[k] = v
+	}
+
+	// Sort parameters
+	paramKeys := make([]string, 0, len(params))
+	for k := range params {
+		paramKeys = append(paramKeys, k)
+	}
+	sort.Strings(paramKeys)
+
+	paramPairs := make([]string, 0, len(paramKeys))
+	for _, k := range paramKeys {
+		paramPairs = append(paramPairs, fmt.Sprintf("%s=%s", k, url.QueryEscape(params[k][0])))
+	}
+
+	queryString := strings.Join(paramPairs, "&")
+	return fmt.Sprintf("%s&%s&%s", method, url.QueryEscape(baseURL), url.QueryEscape(queryString))
+}
+
 func (a *GarthAuthenticator) fetchLoginParamsWithOAuth1(ctx context.Context) (token string, tokenType string, err error) {
-	// Build login URL with OAuth1 context
 	params := url.Values{}
 	params.Set("id", "gauth-widget")
 	params.Set("embedWidget", "true")
-	params.Set("gauthHost", "https://sso.garmin.com/sso")
-	params.Set("service", "https://connect.garmin.com/oauthConfirm")
-	params.Set("source", "https://sso.garmin.com/sso")
-	params.Set("redirectAfterAccountLoginUrl", "https://connect.garmin.com/oauthConfirm")
-	params.Set("redirectAfterAccountCreationUrl", "https://connect.garmin.com/oauthConfirm")
+	params.Set("gauthHost", fmt.Sprintf("https://sso.%s/sso", a.domain))
+	params.Set("service", fmt.Sprintf("https://connect.%s/oauthConfirm", a.domain))
+	params.Set("source", fmt.Sprintf("https://sso.%s/sso", a.domain))
+	params.Set("redirectAfterAccountLoginUrl", fmt.Sprintf("https://connect.%s/oauthConfirm", a.domain))
+	params.Set("redirectAfterAccountCreationUrl", fmt.Sprintf("https://connect.%s/oauthConfirm", a.domain))
 	params.Set("consumeServiceTicket", "false")
 	params.Set("generateExtraServiceTicket", "true")
 	params.Set("clientId", "GarminConnect")
 	params.Set("locale", "en_US")
 
-	// Add OAuth1 token if we have it
 	if a.oauth1Token != "" {
 		params.Set("oauth_token", a.oauth1Token)
 	}
@@ -203,13 +343,11 @@ func (a *GarthAuthenticator) fetchLoginParamsWithOAuth1(ctx context.Context) (to
 		return "", "", fmt.Errorf("failed to create login page request: %w", err)
 	}
 
-	// Set headers with proper referrer chain
 	req.Header.Set("User-Agent", a.userAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Accept-Encoding", "gzip, deflate, br")
-	req.Header.Set("Referer", "https://connect.garmin.com/oauthConfirm")
-	req.Header.Set("Origin", "https://connect.garmin.com")
+	req.Header.Set("Referer", fmt.Sprintf("https://sso.%s/sso/signin?id=gauth-widget&embedWidget=true&gauthHost=https://sso.%s/sso", a.domain, a.domain))
+	req.Header.Set("Origin", fmt.Sprintf("https://sso.%s", a.domain))
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -222,118 +360,16 @@ func (a *GarthAuthenticator) fetchLoginParamsWithOAuth1(ctx context.Context) (to
 		return "", "", fmt.Errorf("failed to read login page response: %w", err)
 	}
 
-	bodyStr := string(body)
-
-	// Extract CSRF/lt token
-	token, tokenType, err = getCSRFTokenWithType(bodyStr)
-	if err != nil {
-		// Save for debugging
-		filename := fmt.Sprintf("login_page_oauth1_%d.html", time.Now().Unix())
-		if writeErr := os.WriteFile(filename, body, 0644); writeErr == nil {
-			return "", "", fmt.Errorf("authentication token not found with OAuth1 context: %w (HTML saved to %s)", err, filename)
-		}
-		return "", "", fmt.Errorf("authentication token not found with OAuth1 context: %w", err)
-	}
-
-	return token, tokenType, nil
+	return getCSRFToken(string(body))
 }
 
-// buildLoginURL constructs the complete login URL with parameters
-func (a *GarthAuthenticator) buildLoginURL() string {
-	// Match Python implementation exactly (order and values)
-	params := url.Values{}
-	params.Set("id", "gauth-widget")
-	params.Set("embedWidget", "true")
-	params.Set("gauthHost", "https://sso.garmin.com/sso")
-	params.Set("service", "https://connect.garmin.com")
-	params.Set("source", "https://sso.garmin.com/sso")
-	params.Set("redirectAfterAccountLoginUrl", "https://connect.garmin.com/oauthConfirm")
-	params.Set("redirectAfterAccountCreationUrl", "https://connect.garmin.com/oauthConfirm")
-	params.Set("consumeServiceTicket", "false")
-	params.Set("generateExtraServiceTicket", "true")
-	params.Set("clientId", "GarminConnect")
-	params.Set("locale", "en_US")
-
-	return "https://sso.garmin.com/sso/signin?" + params.Encode()
-}
-
-// fetchOAuth1Token retrieves initial OAuth1 token for session
-func (a *GarthAuthenticator) fetchOAuth1Token(ctx context.Context) (string, error) {
-	// Step 1: Initial OAuth1 request - this should NOT have parameters initially
-	oauth1URL := "https://connect.garmin.com/oauthConfirm"
-
-	req, err := http.NewRequestWithContext(ctx, "GET", oauth1URL, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create OAuth1 request: %w", err)
-	}
-
-	// Set proper headers
-	req.Header.Set("User-Agent", a.userAgent)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("OAuth1 request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Handle redirect case - OAuth1 token often comes from redirect location
-	if resp.StatusCode >= 300 && resp.StatusCode < 400 {
-		location := resp.Header.Get("Location")
-		if location != "" {
-			if u, err := url.Parse(location); err == nil {
-				if token := u.Query().Get("oauth_token"); token != "" {
-					return token, nil
-				}
-			}
-		}
-	}
-
-	// If no redirect, parse response body
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read OAuth1 response: %w", err)
-	}
-
-	// Look for oauth_token in various formats
-	patterns := []string{
-		`oauth_token=([^&\s"']+)`,
-		`"oauth_token":\s*"([^"]+)"`,
-		`'oauth_token':\s*'([^']+)'`,
-		`oauth_token["']?\s*[:=]\s*["']?([^"'\s&]+)`,
-	}
-
-	for _, pattern := range patterns {
-		re := regexp.MustCompile(pattern)
-		if matches := re.FindStringSubmatch(string(body)); len(matches) > 1 {
-			return matches[1], nil
-		}
-	}
-
-	// Debug: save response to project debug directory
-	debugDir := "go-garth/debug"
-	if err := os.MkdirAll(debugDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create debug directory: %w", err)
-	}
-
-	filename := filepath.Join(debugDir, fmt.Sprintf("oauth1_response_%d.html", time.Now().Unix()))
-	absPath, _ := filepath.Abs(filename)
-	if writeErr := os.WriteFile(filename, body, 0644); writeErr == nil {
-		return "", fmt.Errorf("OAuth1 token not found (response saved to %s)", absPath)
-	}
-
-	return "", fmt.Errorf("OAuth1 token not found in response (failed to save debug file)")
-}
-
-// authenticate performs the authentication flow
-func (a *GarthAuthenticator) authenticate(ctx context.Context, username, password, mfaToken, authToken, tokenType string) (*Token, error) {
+func (a *GarthAuthenticator) authenticate(ctx context.Context, username, password, mfaToken, authToken, tokenType string) (string, error) {
 	data := url.Values{}
 	data.Set("username", username)
 	data.Set("password", password)
 	data.Set("embed", "true")
 	data.Set("rememberme", "on")
 
-	// Set the correct token field based on type
 	if tokenType == "lt" {
 		data.Set("lt", authToken)
 	} else {
@@ -343,18 +379,17 @@ func (a *GarthAuthenticator) authenticate(ctx context.Context, username, passwor
 	data.Set("_eventId", "submit")
 	data.Set("geolocation", "")
 	data.Set("clientId", "GarminConnect")
-	data.Set("service", "https://connect.garmin.com/oauthConfirm") // Updated service URL
-	data.Set("webhost", "https://connect.garmin.com")
+	data.Set("service", fmt.Sprintf("https://connect.%s/oauthConfirm", a.domain))
+	data.Set("webhost", fmt.Sprintf("https://connect.%s", a.domain))
 	data.Set("fromPage", "oauth")
 	data.Set("locale", "en_US")
 	data.Set("id", "gauth-widget")
-	data.Set("redirectAfterAccountLoginUrl", "https://connect.garmin.com/oauthConfirm")
-	data.Set("redirectAfterAccountCreationUrl", "https://connect.garmin.com/oauthConfirm")
+	data.Set("redirectAfterAccountLoginUrl", fmt.Sprintf("https://connect.%s/oauthConfirm", a.domain))
+	data.Set("redirectAfterAccountCreationUrl", fmt.Sprintf("https://connect.%s/oauthConfirm", a.domain))
 
-	loginURL := "https://sso.garmin.com/sso/signin"
-	req, err := http.NewRequestWithContext(ctx, "POST", loginURL, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("https://sso.%s/sso/signin", a.domain), strings.NewReader(data.Encode()))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create SSO request: %w", err)
+		return "", fmt.Errorf("failed to create SSO request: %w", err)
 	}
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -363,7 +398,7 @@ func (a *GarthAuthenticator) authenticate(ctx context.Context, username, passwor
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("SSO request failed: %w", err)
+		return "", fmt.Errorf("SSO request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -374,164 +409,51 @@ func (a *GarthAuthenticator) authenticate(ctx context.Context, username, passwor
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("authentication failed with status: %d, response: %s", resp.StatusCode, body)
+		return "", fmt.Errorf("authentication failed with status: %d, response: %s", resp.StatusCode, body)
 	}
 
 	var authResponse struct {
 		Ticket string `json:"ticket"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&authResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse SSO response: %w", err)
+		return "", fmt.Errorf("failed to parse SSO response: %w", err)
 	}
 
 	if authResponse.Ticket == "" {
-		return nil, errors.New("empty ticket in SSO response")
+		return "", errors.New("empty ticket in SSO response")
 	}
 
-	return a.exchangeTicketForToken(ctx, authResponse.Ticket)
+	return authResponse.Ticket, nil
 }
 
-// exchangeTicketForToken exchanges an SSO ticket for an access token
-func (a *GarthAuthenticator) exchangeTicketForToken(ctx context.Context, ticket string) (*Token, error) {
-	data := url.Values{}
-	data.Set("grant_type", "authorization_code")
-	data.Set("code", ticket)
-	data.Set("redirect_uri", "https://connect.garmin.com")
-
-	req, err := http.NewRequestWithContext(ctx, "POST", a.tokenURL, strings.NewReader(data.Encode()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create token request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", a.userAgent)
-	req.SetBasicAuth("garmin-connect", "garmin-connect-secret")
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("token exchange failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("token exchange failed: %d %s", resp.StatusCode, body)
-	}
-
-	var token Token
-	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
-		return nil, fmt.Errorf("failed to parse token response: %w", err)
-	}
-
-	token.Expiry = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
-	return &token, nil
+func (a *GarthAuthenticator) ExchangeToken(ctx context.Context, token *OAuth1Token) (*Token, error) {
+	return a.exchangeOAuth1ForOAuth2Token(ctx, token)
 }
 
-// handleMFA processes multi-factor authentication
-func (a *GarthAuthenticator) handleMFA(ctx context.Context, username, password, mfaToken, responseBody string) (*Token, error) {
-	// Extract CSRF token from response body
-	csrfToken, err := extractParam(`name="_csrf"\s+value="([^"]+)"`, responseBody)
-	if err != nil {
-		return nil, &AuthError{
-			StatusCode: http.StatusPreconditionFailed,
-			Message:    "MFA CSRF token not found",
-			Cause:      err,
-		}
+// Removed exchangeTicketForToken method - no longer needed
+
+func (a *GarthAuthenticator) getEnhancedBrowserHeaders(referrer string) http.Header {
+	u, _ := url.Parse(referrer)
+	origin := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+
+	return http.Header{
+		"User-Agent":                {a.userAgent},
+		"Accept":                    {"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"},
+		"Accept-Language":           {"en-US,en;q=0.9"},
+		"Connection":                {"keep-alive"},
+		"Cache-Control":             {"max-age=0"},
+		"Origin":                    {origin},
+		"Referer":                   {referrer},
+		"Sec-Fetch-Site":            {"same-origin"},
+		"Sec-Fetch-Mode":            {"navigate"},
+		"Sec-Fetch-User":            {"?1"},
+		"Sec-Fetch-Dest":            {"document"},
+		"DNT":                       {"1"},
+		"Upgrade-Insecure-Requests": {"1"},
 	}
-
-	// Prepare MFA request
-	data := url.Values{}
-	data.Set("username", username)
-	data.Set("password", password)
-	data.Set("mfaToken", mfaToken)
-	data.Set("embed", "true")
-	data.Set("rememberme", "on")
-	data.Set("_csrf", csrfToken)
-	data.Set("_eventId", "submit")
-	data.Set("geolocation", "")
-	data.Set("clientId", "GarminConnect")
-	data.Set("service", "https://connect.garmin.com")
-	data.Set("webhost", "https://connect.garmin.com")
-	data.Set("fromPage", "oauth")
-	data.Set("locale", "en_US")
-	data.Set("id", "gauth-widget")
-	data.Set("redirectAfterAccountLoginUrl", "https://connect.garmin.com/oauthConfirm")
-	data.Set("redirectAfterAccountCreationUrl", "https://connect.garmin.com/oauthConfirm")
-
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://sso.garmin.com/sso/signin", strings.NewReader(data.Encode()))
-	if err != nil {
-		return nil, &AuthError{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "Failed to create MFA request",
-			Cause:      err,
-		}
-	}
-
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", a.userAgent)
-
-	resp, err := a.client.Do(req)
-	if err != nil {
-		return nil, &AuthError{
-			StatusCode: http.StatusBadGateway,
-			Message:    "MFA request failed",
-			Cause:      err,
-		}
-	}
-	defer resp.Body.Close()
-
-	// Handle MFA response
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, &AuthError{
-			StatusCode: resp.StatusCode,
-			Message:    fmt.Sprintf("MFA failed: %s", body),
-			Type:       "mfa_failure",
-		}
-	}
-
-	// Parse MFA response
-	var mfaResponse struct {
-		Ticket string `json:"ticket"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&mfaResponse); err != nil {
-		return nil, &AuthError{
-			StatusCode: http.StatusInternalServerError,
-			Message:    "Failed to parse MFA response",
-			Cause:      err,
-		}
-	}
-
-	if mfaResponse.Ticket == "" {
-		return nil, &AuthError{
-			StatusCode: http.StatusUnauthorized,
-			Message:    "Invalid MFA response - ticket missing",
-			Type:       "invalid_mfa_response",
-		}
-	}
-
-	return a.exchangeTicketForToken(ctx, mfaResponse.Ticket)
 }
 
-// extractParam helper to extract regex pattern
-func extractParam(pattern, body string) (string, error) {
-	re := regexp.MustCompile(pattern)
-	matches := re.FindStringSubmatch(body)
-	if len(matches) < 2 {
-		return "", fmt.Errorf("pattern not found: %s", pattern)
-	}
-	return matches[1], nil
-}
-
-// getCSRFToken extracts the CSRF token from HTML using multiple patterns
-func getCSRFToken(html string) (string, error) {
-	token, _, err := getCSRFTokenWithType(html)
-	return token, err
-}
-
-// getCSRFTokenWithType returns token and its type (lt or _csrf)
-func getCSRFTokenWithType(html string) (string, string, error) {
-	// Check lt patterns first
+func getCSRFToken(html string) (string, string, error) {
 	ltPatterns := []string{
 		`name="lt"\s+value="([^"]+)"`,
 		`name="lt"\s+type="hidden"\s+value="([^"]+)"`,
@@ -546,7 +468,6 @@ func getCSRFTokenWithType(html string) (string, string, error) {
 		}
 	}
 
-	// Check CSRF patterns
 	csrfPatterns := []string{
 		`name="_csrf"\s+value="([^"]+)"`,
 		`"csrfToken":"([^"]+)"`,
@@ -563,49 +484,141 @@ func getCSRFTokenWithType(html string) (string, string, error) {
 	return "", "", errors.New("no authentication token found")
 }
 
-// extractFromJSON tries to find the CSRF token in a JSON structure
-func extractFromJSON(html string) (string, error) {
-	// Pattern to find the JSON config in script tags
-	re := regexp.MustCompile(`window\.__INITIAL_CONFIG__ = (\{.*?\});`)
-	matches := re.FindStringSubmatch(html)
-	if len(matches) < 2 {
-		return "", errors.New("JSON config not found")
+// RefreshToken implements token refresh functionality
+func (a *GarthAuthenticator) RefreshToken(ctx context.Context, refreshToken string) (*Token, error) {
+	data := url.Values{}
+	data.Set("grant_type", "refresh_token")
+	data.Set("refresh_token", refreshToken)
+
+	req, err := http.NewRequestWithContext(ctx, "POST", a.tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create refresh request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", a.userAgent)
+	req.SetBasicAuth("garmin-connect", "garmin-connect-secret")
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("refresh request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("refresh failed: %d %s", resp.StatusCode, body)
 	}
 
-	// Parse the JSON
-	var config struct {
-		CSRFToken string `json:"csrfToken"`
-	}
-	if err := json.Unmarshal([]byte(matches[1]), &config); err != nil {
-		return "", fmt.Errorf("failed to parse JSON config: %w", err)
+	var token Token
+	if err := json.NewDecoder(resp.Body).Decode(&token); err != nil {
+		return nil, fmt.Errorf("failed to parse refresh response: %w", err)
 	}
 
-	if config.CSRFToken == "" {
-		return "", errors.New("csrfToken not found in JSON config")
+	if token.OAuth2 != nil {
+		token.OAuth2.Expiry = time.Now().Add(time.Duration(token.OAuth2.ExpiresIn) * time.Second)
 	}
-
-	return config.CSRFToken, nil
+	return &token, nil
 }
 
-// getEnhancedBrowserHeaders returns browser-like headers including Referer and Origin
-func (a *GarthAuthenticator) getEnhancedBrowserHeaders(referrer string) http.Header {
-	u, _ := url.Parse(referrer)
-	origin := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+// GetClient returns the HTTP client used for authentication
+func (a *GarthAuthenticator) GetClient() *http.Client {
+	return a.client
+}
 
-	return http.Header{
-		"User-Agent":                {a.userAgent},
-		"Accept":                    {"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"},
-		"Accept-Language":           {"en-US,en;q=0.9"},
-		"Accept-Encoding":           {"gzip, deflate, br"},
-		"Connection":                {"keep-alive"},
-		"Cache-Control":             {"max-age=0"},
-		"Origin":                    {origin},
-		"Referer":                   {referrer},
-		"Sec-Fetch-Site":            {"same-origin"},
-		"Sec-Fetch-Mode":            {"navigate"},
-		"Sec-Fetch-User":            {"?1"},
-		"Sec-Fetch-Dest":            {"document"},
-		"DNT":                       {"1"},
-		"Upgrade-Insecure-Requests": {"1"},
+// handleMFA processes multi-factor authentication
+func (a *GarthAuthenticator) handleMFA(ctx context.Context, username, password, mfaToken, responseBody string) (string, error) {
+	csrfToken, err := extractParam(`name="_csrf"\s+value="([^"]+)"`, responseBody)
+	if err != nil {
+		return "", &AuthError{
+			StatusCode: http.StatusPreconditionFailed,
+			Message:    "MFA CSRF token not found",
+			Cause:      err,
+		}
 	}
+
+	data := url.Values{}
+	data.Set("username", username)
+	data.Set("password", password)
+	data.Set("mfaToken", mfaToken)
+	data.Set("embed", "true")
+	data.Set("rememberme", "on")
+	data.Set("_csrf", csrfToken)
+	data.Set("_eventId", "submit")
+	data.Set("geolocation", "")
+	data.Set("clientId", "GarminConnect")
+	data.Set("service", fmt.Sprintf("https://connect.%s", a.domain))
+	data.Set("webhost", fmt.Sprintf("https://connect.%s", a.domain))
+	data.Set("fromPage", "oauth")
+	data.Set("locale", "en_US")
+	data.Set("id", "gauth-widget")
+	data.Set("redirectAfterAccountLoginUrl", fmt.Sprintf("https://connect.%s/oauthConfirm", a.domain))
+	data.Set("redirectAfterAccountCreationUrl", fmt.Sprintf("https://connect.%s/oauthConfirm", a.domain))
+
+	req, err := http.NewRequestWithContext(ctx, "POST", fmt.Sprintf("https://sso.%s/sso/signin", a.domain), strings.NewReader(data.Encode()))
+	if err != nil {
+		return "", &AuthError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to create MFA request",
+			Cause:      err,
+		}
+	}
+
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", a.userAgent)
+
+	resp, err := a.client.Do(req)
+	if err != nil {
+		return "", &AuthError{
+			StatusCode: http.StatusBadGateway,
+			Message:    "MFA request failed",
+			Cause:      err,
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", &AuthError{
+			StatusCode: resp.StatusCode,
+			Message:    fmt.Sprintf("MFA failed: %s", body),
+			Type:       "mfa_failure",
+		}
+	}
+
+	var mfaResponse struct {
+		Ticket string `json:"ticket"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&mfaResponse); err != nil {
+		return "", &AuthError{
+			StatusCode: http.StatusInternalServerError,
+			Message:    "Failed to parse MFA response",
+			Cause:      err,
+		}
+	}
+
+	if mfaResponse.Ticket == "" {
+		return "", &AuthError{
+			StatusCode: http.StatusUnauthorized,
+			Message:    "Invalid MFA response - ticket missing",
+			Type:       "invalid_mfa_response",
+		}
+	}
+
+	return mfaResponse.Ticket, nil
+}
+
+// Configure updates authenticator settings
+func (a *GarthAuthenticator) Configure(domain string) {
+	a.domain = domain
+}
+
+// extractParam helper to extract regex pattern
+func extractParam(pattern, body string) (string, error) {
+	re := regexp.MustCompile(pattern)
+	matches := re.FindStringSubmatch(body)
+	if len(matches) < 2 {
+		return "", fmt.Errorf("pattern not found: %s", pattern)
+	}
+	return matches[1], nil
 }

@@ -27,10 +27,19 @@ func (s *MemoryStorage) GetToken() (*Token, error) {
 }
 
 // SaveToken saves token to memory
-func (s *MemoryStorage) SaveToken(token *Token) error {
+func (s *MemoryStorage) StoreToken(token *Token) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	s.token = token
+	return nil
+}
+
+// ClearToken removes the token from memory
+func (s *MemoryStorage) ClearToken() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.token = nil
 	return nil
 }

@@ -44,16 +44,16 @@ func TestRealAuthentication(t *testing.T) {
 	}
 
 	log.Printf("Authentication successful! Token details:")
-	log.Printf("Access Token: %s", token.AccessToken)
-	log.Printf("Expires: %s", token.Expiry.Format(time.RFC3339))
-	log.Printf("Refresh Token: %s", token.RefreshToken)
+	log.Printf("Access Token: %s", token.OAuth2.AccessToken)
+	log.Printf("Expires: %s", token.OAuth2.Expiry.Format(time.RFC3339))
+	log.Printf("Refresh Token: %s", token.OAuth2.RefreshToken)
 
 	// Verify token storage
 	storedToken, err := storage.GetToken()
 	if err != nil {
 		t.Fatalf("Token storage verification failed: %v", err)
 	}
-	if storedToken.AccessToken != token.AccessToken {
+	if storedToken.OAuth2.AccessToken != token.OAuth2.AccessToken {
 		t.Fatal("Stored token doesn't match authenticated token")
 	}
 

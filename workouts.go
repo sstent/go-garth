@@ -25,56 +25,48 @@ func NewWorkoutService(client *APIClient) *WorkoutService {
 
 // Workout represents a Garmin workout with basic information
 type Workout struct {
-	ID              string           `json:"id"`
-	Name            string           `json:"name"`
-	Description     string           `json:"description"`
-	Type            string           `json:"type"`
-	SportType       string           `json:"sportType"`
-	SubSportType    string           `json:"subSportType"`
-	CreatedDate     time.Time        `json:"createdDate"`
-	UpdatedDate     time.Time        `json:"updatedDate"`
-	OwnerID         int64            `json:"ownerId"`
-	WorkoutSegments []WorkoutSegment `json:"workoutSegments,omitempty"`
+	WorkoutID    int64     `json:"workoutId"`
+	Name         string    `json:"workoutName"`
+	Type         string    `json:"workoutType"`
+	Description  string    `json:"description"`
+	CreatedDate  time.Time `json:"createdDate"`
+	UpdatedDate  time.Time `json:"updatedDate"`
+	OwnerID      int64     `json:"ownerId"`
+	IsPublic     bool      `json:"isPublic"`
+	SportType    string    `json:"sportType"`
+	SubSportType string    `json:"subSportType"`
 }
 
 // WorkoutDetails contains detailed information about a workout
 type WorkoutDetails struct {
 	Workout
-	EstimatedDuration   int64            `json:"estimatedDuration"`
-	EstimatedDistance   float64          `json:"estimatedDistance"`
-	TrainingStressScore float64          `json:"trainingStressScore"`
-	IntensityFactor     float64          `json:"intensityFactor"`
-	WorkoutProvider     string           `json:"workoutProvider"`
-	WorkoutSource       string           `json:"workoutSource"`
-	WorkoutMetrics      json.RawMessage  `json:"workoutMetrics"`
-	WorkoutGoals        json.RawMessage  `json:"workoutGoals"`
-	WorkoutTags         []string         `json:"workoutTags"`
-	WorkoutSegments     []WorkoutSegment `json:"workoutSegments"`
+	WorkoutSegments   []WorkoutSegment `json:"workoutSegments"`
+	EstimatedDuration int              `json:"estimatedDuration"`
+	EstimatedDistance float64          `json:"estimatedDistance"`
+	TrainingLoad      float64          `json:"trainingLoad"`
+	Tags              []string         `json:"tags"`
 }
 
 // WorkoutSegment represents a segment within a workout
 type WorkoutSegment struct {
-	ID          string            `json:"id"`
+	SegmentID   int64             `json:"segmentId"`
 	Name        string            `json:"name"`
 	Description string            `json:"description"`
 	Order       int               `json:"order"`
-	Duration    int64             `json:"duration"`
-	Distance    float64           `json:"distance"`
 	Exercises   []WorkoutExercise `json:"exercises"`
 }
 
 // WorkoutExercise represents an exercise within a workout segment
 type WorkoutExercise struct {
-	ID              string          `json:"id"`
-	Name            string          `json:"name"`
-	Description     string          `json:"description"`
-	Order           int             `json:"order"`
-	Duration        int64           `json:"duration"`
-	Distance        float64         `json:"distance"`
-	Repetitions     int             `json:"repetitions"`
-	Weight          float64         `json:"weight"`
-	Intensity       string          `json:"intensity"`
-	ExerciseMetrics json.RawMessage `json:"exerciseMetrics"`
+	ExerciseID   int64   `json:"exerciseId"`
+	Name         string  `json:"name"`
+	Category     string  `json:"category"`
+	Type         string  `json:"type"`
+	Duration     int     `json:"duration,omitempty"`
+	Distance     float64 `json:"distance,omitempty"`
+	Repetitions  int     `json:"repetitions,omitempty"`
+	Weight       float64 `json:"weight,omitempty"`
+	RestInterval int     `json:"restInterval,omitempty"`
 }
 
 // WorkoutListOptions provides filtering options for listing workouts
@@ -464,7 +456,7 @@ func (s *WorkoutService) Export(ctx context.Context, id string, format string) (
 		}
 	}
 
-	path := "/workout-service/workout/" + id + "/export/" + format
+	path := "/download-service/export/" + format + "/workout/" + id
 
 	resp, err := s.client.Get(ctx, path)
 	if err != nil {

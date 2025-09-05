@@ -6,13 +6,72 @@ import (
 	"time"
 )
 
-// TokenStorage defines the interface for token persistence
-type TokenStorage interface {
-	// GetToken retrieves the stored token
-	GetToken() (*Token, error)
+// Unified Token Definitions
 
-	// SaveToken stores a new token
-	SaveToken(token *Token) error
+// OAuth1Token represents OAuth1 credentials
+type OAuth1Token struct {
+	Token  string
+	Secret string
+}
+
+// OAuth2Token represents OAuth2 credentials
+type OAuth2Token struct {
+	AccessToken  string    `json:"access_token"`
+	TokenType    string    `json:"token_type"`
+	RefreshToken string    `json:"refresh_token"`
+	ExpiresIn    int       `json:"expires_in"`
+	Expiry       time.Time `json:"-"`
+}
+
+// IsExpired checks if the token has expired
+func (t *OAuth2Token) IsExpired() bool {
+	return time.Now().After(t.Expiry)
+}
+
+// Token represents unified authentication credentials
+type Token struct {
+	OAuth1      *OAuth1Token
+	OAuth2      *OAuth2Token
+	UserProfile *UserProfile
+	Domain      string
+}
+
+// IsExpired checks if the OAuth2 token has expired
+func (t *Token) IsExpired() bool {
+	if t.OAuth2 == nil {
+		return true
+	}
+	return t.OAuth2.IsExpired()
+}
+
+// NeedsRefresh checks if token needs refresh (within 5 min expiry window)
+func (t *Token) NeedsRefresh() bool {
+	if t.OAuth2 == nil {
+		return true
+	}
+	return time.Now().Add(5 * time.Minute).After(t.OAuth2.Expiry)
+}
+
+// UserProfile represents Garmin user profile information
+type UserProfile struct {
+	Username    string
+	ProfileID   string
+	DisplayName string
+}
+
+// ClientOptions contains configuration for the authenticator
+type ClientOptions struct {
+	Storage  TokenStorage
+	TokenURL string
+	Domain   string // garmin.com or garmin.cn
+	Timeout  time.Duration
+}
+
+// TokenStorage defines the interface for token storage
+type TokenStorage interface {
+	StoreToken(token *Token) error
+	GetToken() (*Token, error)
+	ClearToken() error
 }
 
 // Error interface defines common error behavior for Garth
@@ -26,20 +85,6 @@ type Error interface {
 
 // ErrTokenNotFound is returned when a token is not available in storage
 var ErrTokenNotFound = errors.New("token not found")
-
-// Token represents OAuth 2.0 tokens
-type Token struct {
-	AccessToken  string    `json:"access_token"`
-	TokenType    string    `json:"token_type,omitempty"`
-	RefreshToken string    `json:"refresh_token"`
-	ExpiresIn    int       `json:"expires_in,omitempty"` // Duration in seconds
-	Expiry       time.Time `json:"expiry"`               // Absolute time of expiration
-}
-
-// IsExpired checks if the token has expired
-func (t *Token) IsExpired() bool {
-	return time.Now().After(t.Expiry)
-}
 
 // AuthError represents Garmin authentication errors
 type AuthError struct {
