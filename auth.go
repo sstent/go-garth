@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -73,7 +74,7 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 		client:    client,
 		tokenURL:  opts.TokenURL,
 		storage:   opts.Storage,
-		userAgent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		userAgent: "GCMv3",
 		domain:    opts.Domain,
 	}
 
@@ -85,32 +86,51 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 }
 
 func (a *GarthAuthenticator) Login(ctx context.Context, username, password, mfaToken string) (*Token, error) {
-	// Step 1: Get OAuth1 request token
+	// Step 1: Get login ticket (lt) from SSO signin page
+	authToken, tokenType, err := a.getLoginTicket(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get login ticket: %w", err)
+	}
+
+	// Step 2: Authenticate with credentials
+	serviceTicket, err := a.authenticate(ctx, username, password, "", authToken, tokenType)
+	if err != nil {
+		// Check if MFA is required
+		if authErr, ok := err.(*AuthError); ok && authErr.Type == "mfa_required" {
+			if mfaToken == "" {
+				return nil, errors.New("MFA required but no token provided")
+			}
+			log.Printf("MFA required, handling with token: %s", mfaToken)
+			// Handle MFA authentication
+			serviceTicket, err = a.handleMFA(ctx, username, password, mfaToken, authErr.CSRF)
+			if err != nil {
+				return nil, fmt.Errorf("MFA authentication failed: %w", err)
+			}
+			log.Printf("MFA authentication successful, service ticket obtained")
+		} else {
+			return nil, err
+		}
+	}
+
+	// Step 3: Get OAuth1 request token
 	oauth1RequestToken, err := a.fetchOAuth1RequestToken(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get OAuth1 request token: %w", err)
 	}
 
-	// Step 2: Authorize OAuth1 request token
-	authToken, tokenType, err := a.authorizeOAuth1Token(ctx, oauth1RequestToken)
+	// Step 4: Authorize OAuth1 request token (using the session from authentication)
+	err = a.authorizeOAuth1Token(ctx, oauth1RequestToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to authorize OAuth1 token: %w", err)
 	}
-	a.csrfToken = authToken
 
-	// Step 3: Authenticate with credentials to get service ticket
-	serviceTicket, err := a.authenticate(ctx, username, password, mfaToken, authToken, tokenType)
-	if err != nil {
-		return nil, err
-	}
-
-	// Step 4: Exchange service ticket for OAuth1 access token
+	// Step 5: Exchange service ticket for OAuth1 access token
 	oauth1AccessToken, err := a.exchangeTicketForOAuth1Token(ctx, serviceTicket)
 	if err != nil {
 		return nil, fmt.Errorf("failed to exchange ticket for OAuth1 access token: %w", err)
 	}
 
-	// Step 5: Exchange OAuth1 access token for OAuth2 token
+	// Step 6: Exchange OAuth1 access token for OAuth2 token
 	token, err := a.exchangeOAuth1ForOAuth2Token(ctx, oauth1AccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to exchange OAuth1 for OAuth2 token: %w", err)
@@ -158,30 +178,31 @@ func (a *GarthAuthenticator) fetchOAuth1RequestToken(ctx context.Context) (*OAut
 	}, nil
 }
 
-func (a *GarthAuthenticator) authorizeOAuth1Token(ctx context.Context, token *OAuth1Token) (string, string, error) {
+func (a *GarthAuthenticator) authorizeOAuth1Token(ctx context.Context, token *OAuth1Token) error {
 	params := url.Values{}
 	params.Set("oauth_token", token.Token)
 	authURL := fmt.Sprintf("https://connect.%s/oauthConfirm?%s", a.domain, params.Encode())
 
 	req, err := http.NewRequestWithContext(ctx, "GET", authURL, nil)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to create authorization request: %w", err)
+		return fmt.Errorf("failed to create authorization request: %w", err)
 	}
 
 	req.Header = a.getEnhancedBrowserHeaders(authURL)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
-		return "", "", fmt.Errorf("authorization request failed: %w", err)
+		return fmt.Errorf("authorization request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to read authorization response: %w", err)
+	// We don't need the CSRF token anymore, so just check for success
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("authorization failed with status: %d, response: %s", resp.StatusCode, body)
 	}
 
-	return getCSRFToken(string(body))
+	return nil
 }
 
 func (a *GarthAuthenticator) exchangeTicketForOAuth1Token(ctx context.Context, ticket string) (*OAuth1Token, error) {
@@ -245,10 +266,10 @@ func (a *GarthAuthenticator) exchangeOAuth1ForOAuth2Token(ctx context.Context, o
 		return nil, fmt.Errorf("failed to parse token response: %w", err)
 	}
 
-	if token.OAuth2 != nil {
-		token.OAuth2.Expiry = time.Now().Add(time.Duration(token.OAuth2.ExpiresIn) * time.Second)
+	if token.OAuth2Token != nil {
+		token.OAuth2Token.ExpiresAt = time.Now().Add(time.Duration(token.OAuth2Token.ExpiresIn) * time.Second).Unix()
 	}
-	token.OAuth1 = oauth1Token
+	token.OAuth1Token = oauth1Token
 	return &token, nil
 }
 
@@ -318,7 +339,7 @@ func (a *GarthAuthenticator) buildSignatureBaseString(req *http.Request, oauthPa
 	return fmt.Sprintf("%s&%s&%s", method, url.QueryEscape(baseURL), url.QueryEscape(queryString))
 }
 
-func (a *GarthAuthenticator) fetchLoginParamsWithOAuth1(ctx context.Context) (token string, tokenType string, err error) {
+func (a *GarthAuthenticator) getLoginTicket(ctx context.Context) (string, string, error) {
 	params := url.Values{}
 	params.Set("id", "gauth-widget")
 	params.Set("embedWidget", "true")
@@ -404,7 +425,22 @@ func (a *GarthAuthenticator) authenticate(ctx context.Context, username, passwor
 
 	if resp.StatusCode == http.StatusPreconditionFailed {
 		body, _ := io.ReadAll(resp.Body)
-		return a.handleMFA(ctx, username, password, mfaToken, string(body))
+		csrfToken, err := extractParam(`name="_csrf"\s+value="([^"]+)"`, string(body))
+		if err != nil {
+			return "", &AuthError{
+				StatusCode: http.StatusPreconditionFailed,
+				Message:    "MFA CSRF token not found",
+				Cause:      err,
+				Type:       "mfa_required",
+				CSRF:       "", // Will be set below
+			}
+		}
+		return "", &AuthError{
+			StatusCode: http.StatusPreconditionFailed,
+			Message:    "MFA required",
+			Type:       "mfa_required",
+			CSRF:       csrfToken,
+		}
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -437,7 +473,7 @@ func (a *GarthAuthenticator) getEnhancedBrowserHeaders(referrer string) http.Hea
 	origin := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
 
 	return http.Header{
-		"User-Agent":                {a.userAgent},
+		"User-Agent":                {"GCMv3"},
 		"Accept":                    {"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"},
 		"Accept-Language":           {"en-US,en;q=0.9"},
 		"Connection":                {"keep-alive"},
@@ -514,8 +550,8 @@ func (a *GarthAuthenticator) RefreshToken(ctx context.Context, refreshToken stri
 		return nil, fmt.Errorf("failed to parse refresh response: %w", err)
 	}
 
-	if token.OAuth2 != nil {
-		token.OAuth2.Expiry = time.Now().Add(time.Duration(token.OAuth2.ExpiresIn) * time.Second)
+	if token.OAuth2Token != nil {
+		token.OAuth2Token.ExpiresAt = time.Now().Add(time.Duration(token.OAuth2Token.ExpiresIn) * time.Second).Unix()
 	}
 	return &token, nil
 }
@@ -526,16 +562,7 @@ func (a *GarthAuthenticator) GetClient() *http.Client {
 }
 
 // handleMFA processes multi-factor authentication
-func (a *GarthAuthenticator) handleMFA(ctx context.Context, username, password, mfaToken, responseBody string) (string, error) {
-	csrfToken, err := extractParam(`name="_csrf"\s+value="([^"]+)"`, responseBody)
-	if err != nil {
-		return "", &AuthError{
-			StatusCode: http.StatusPreconditionFailed,
-			Message:    "MFA CSRF token not found",
-			Cause:      err,
-		}
-	}
-
+func (a *GarthAuthenticator) handleMFA(ctx context.Context, username, password, mfaToken, csrfToken string) (string, error) {
 	data := url.Values{}
 	data.Set("username", username)
 	data.Set("password", password)
@@ -565,7 +592,7 @@ func (a *GarthAuthenticator) handleMFA(ctx context.Context, username, password, 
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", a.userAgent)
+	req.Header.Set("User-Agent", "GCMv3")
 
 	resp, err := a.client.Do(req)
 	if err != nil {

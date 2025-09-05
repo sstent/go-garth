@@ -40,16 +40,16 @@ func main() {
 	}
 
 	fmt.Println("\nAuthentication successful! Token details:")
-	fmt.Printf("Access Token: %s\n", token.OAuth2.AccessToken)
-	fmt.Printf("Expires: %s\n", token.OAuth2.Expiry.Format("2006-01-02 15:04:05"))
-	fmt.Printf("Refresh Token: %s\n", token.OAuth2.RefreshToken)
+	fmt.Printf("Access Token: %s\n", token.OAuth2Token.AccessToken)
+	fmt.Printf("Expires At: %d\n", token.OAuth2Token.ExpiresAt)
+	fmt.Printf("Refresh Token: %s\n", token.OAuth2Token.RefreshToken)
 
 	// Verify token storage
 	storedToken, err := storage.GetToken()
 	if err != nil {
 		log.Fatalf("Token storage verification failed: %v", err)
 	}
-	if storedToken.OAuth2.AccessToken != token.OAuth2.AccessToken {
+	if storedToken.OAuth2Token.AccessToken != token.OAuth2Token.AccessToken {
 		log.Fatal("Stored token doesn't match authenticated token")
 	}
 

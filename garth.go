@@ -54,16 +54,6 @@ type Authenticator interface {
 	GetClient() *http.Client
 }
 
-// ClientOptions configures the Authenticator
-type ClientOptions struct {
-	SSOURL    string        // SSO endpoint
-	TokenURL  string        // Token exchange endpoint
-	Storage   TokenStorage  // Token storage implementation
-	Timeout   time.Duration // HTTP client timeout
-	Domain    string        // Garmin domain (default: garmin.com)
-	UserAgent string        // User-Agent header (default: GCMv3)
-}
-
 // NewClientOptionsFromEnv creates ClientOptions from environment variables
 func NewClientOptionsFromEnv() ClientOptions {
 	// Default configuration

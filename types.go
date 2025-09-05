@@ -16,11 +16,12 @@ type OAuth1Token struct {
 
 // OAuth2Token represents OAuth2 credentials
 type OAuth2Token struct {
-	AccessToken  string    `json:"access_token"`
-	TokenType    string    `json:"token_type"`
-	RefreshToken string    `json:"refresh_token"`
-	ExpiresIn    int       `json:"expires_in"`
-	Expiry       time.Time `json:"-"`
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	ExpiresAt    int64  `json:"expires_at"`
+	RefreshToken string `json:"refresh_token"`
+	Scope        string `json:"scope"`
 }
 
 // IsExpired checks if the token has expired
@@ -30,10 +31,10 @@ func (t *OAuth2Token) IsExpired() bool {
 
 // Token represents unified authentication credentials
 type Token struct {
-	OAuth1      *OAuth1Token
-	OAuth2      *OAuth2Token
-	UserProfile *UserProfile
-	Domain      string
+	Domain      string       `json:"domain"`
+	OAuth1Token *OAuth1Token `json:"oauth1_token"`
+	OAuth2Token *OAuth2Token `json:"oauth2_token"`
+	UserProfile *UserProfile `json:"user_profile"`
 }
 
 // IsExpired checks if the OAuth2 token has expired
@@ -54,17 +55,19 @@ func (t *Token) NeedsRefresh() bool {
 
 // UserProfile represents Garmin user profile information
 type UserProfile struct {
-	Username    string
-	ProfileID   string
-	DisplayName string
+	Username    string `json:"username"`
+	ProfileID   string `json:"profile_id"`
+	DisplayName string `json:"display_name"`
 }
 
 // ClientOptions contains configuration for the authenticator
 type ClientOptions struct {
-	Storage  TokenStorage
-	TokenURL string
-	Domain   string // garmin.com or garmin.cn
-	Timeout  time.Duration
+	SSOURL    string        // SSO endpoint
+	TokenURL  string        // Token exchange endpoint
+	Storage   TokenStorage  // Token storage implementation
+	Timeout   time.Duration // HTTP client timeout
+	Domain    string        // Garmin domain (default: garmin.com)
+	UserAgent string        // User-Agent header (default: GCMv3)
 }
 
 // TokenStorage defines the interface for token storage
@@ -92,6 +95,7 @@ type AuthError struct {
 	Message    string `json:"message"`     // Human-readable error message
 	Type       string `json:"type"`        // Garmin error type identifier
 	Cause      error  `json:"cause"`       // Underlying error
+	CSRF       string `json:"csrf"`        // CSRF token for MFA flow
 }
 
 // GetStatusCode returns the HTTP status code

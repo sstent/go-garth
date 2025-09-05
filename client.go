@@ -59,7 +59,7 @@ func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	// Add Authorization header
-	req.Header.Set("Authorization", "Bearer "+token.OAuth2.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+token.OAuth2Token.AccessToken)
 	req.Header.Set("User-Agent", t.userAgent)
 
 	// Execute request with retry logic
@@ -84,7 +84,7 @@ func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			if err != nil {
 				return nil, err
 			}
-			req.Header.Set("Authorization", "Bearer "+token.OAuth2.AccessToken)
+			req.Header.Set("Authorization", "Bearer "+token.OAuth2Token.AccessToken)
 			continue
 		}
 
@@ -122,7 +122,7 @@ func (t *AuthTransport) refreshToken(ctx context.Context, token *Token) (*Token,
 	}
 
 	// Perform refresh
-	newToken, err := t.auth.RefreshToken(ctx, token.OAuth2.RefreshToken)
+	newToken, err := t.auth.RefreshToken(ctx, token.OAuth2Token.RefreshToken)
 	if err != nil {
 		return nil, err
 	}
