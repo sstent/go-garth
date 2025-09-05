@@ -14,6 +14,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"os"
 	"regexp"
 	"sort"
 	"strings"
@@ -37,11 +38,23 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 	if opts.Domain == "" {
 		opts.Domain = "garmin.com"
 	}
+
+	// Enhanced transport with better TLS settings and compression
 	baseTransport := &http.Transport{
 		TLSClientConfig: &tls.Config{
-			MinVersion: tls.VersionTLS12,
+			MinVersion:               tls.VersionTLS12,
+			PreferServerCipherSuites: true,
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+				tls.TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305,
+				tls.TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+			},
 		},
-		Proxy: http.ProxyFromEnvironment,
+		Proxy:               http.ProxyFromEnvironment,
+		DisableCompression:  false, // Enable compression
+		MaxIdleConns:        10,
+		IdleConnTimeout:     30 * time.Second,
+		TLSHandshakeTimeout: 10 * time.Second,
 	}
 
 	jar, err := cookiejar.New(nil)
@@ -56,6 +69,15 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			if len(via) >= 10 {
 				return errors.New("stopped after 10 redirects")
+			}
+			// Preserve headers during redirects
+			if len(via) > 0 {
+				for key, values := range via[0].Header {
+					if key == "Authorization" || key == "Cookie" {
+						continue // Let the jar handle cookies
+					}
+					req.Header[key] = values
+				}
 			}
 			if jar != nil {
 				for _, v := range via {
@@ -74,7 +96,7 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 		client:    client,
 		tokenURL:  opts.TokenURL,
 		storage:   opts.Storage,
-		userAgent: "GCMv3",
+		userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", // More realistic user agent
 		domain:    opts.Domain,
 	}
 
@@ -85,7 +107,37 @@ func NewAuthenticator(opts ClientOptions) Authenticator {
 	return auth
 }
 
+// Enhanced browser headers to bypass Cloudflare
+func (a *GarthAuthenticator) getRealisticBrowserHeaders(referer string) http.Header {
+	headers := http.Header{
+		"User-Agent":                {a.userAgent},
+		"Accept":                    {"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"},
+		"Accept-Language":           {"en-US,en;q=0.9"},
+		"Accept-Encoding":           {"gzip, deflate, br"},
+		"Cache-Control":             {"max-age=0"},
+		"Sec-Ch-Ua":                 {`"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"`},
+		"Sec-Ch-Ua-Mobile":          {"?0"},
+		"Sec-Ch-Ua-Platform":        {`"Windows"`},
+		"Sec-Fetch-Dest":            {"document"},
+		"Sec-Fetch-Mode":            {"navigate"},
+		"Sec-Fetch-Site":            {"none"},
+		"Sec-Fetch-User":            {"?1"},
+		"Upgrade-Insecure-Requests": {"1"},
+		"DNT":                       {"1"},
+	}
+
+	if referer != "" {
+		headers.Set("Referer", referer)
+		headers.Set("Sec-Fetch-Site", "same-origin")
+	}
+
+	return headers
+}
+
 func (a *GarthAuthenticator) Login(ctx context.Context, username, password, mfaToken string) (*Token, error) {
+	// Add delay to simulate human behavior
+	time.Sleep(time.Duration(500+rand.Intn(1000)) * time.Millisecond)
+
 	// Step 1: Get login ticket (lt) from SSO signin page
 	authToken, tokenType, err := a.getLoginTicket(ctx)
 	if err != nil {
@@ -188,7 +240,8 @@ func (a *GarthAuthenticator) authorizeOAuth1Token(ctx context.Context, token *OA
 		return fmt.Errorf("failed to create authorization request: %w", err)
 	}
 
-	req.Header = a.getEnhancedBrowserHeaders(authURL)
+	// Use realistic browser headers
+	req.Header = a.getRealisticBrowserHeaders("https://connect.garmin.com")
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -364,17 +417,24 @@ func (a *GarthAuthenticator) getLoginTicket(ctx context.Context) (string, string
 		return "", "", fmt.Errorf("failed to create login page request: %w", err)
 	}
 
-	req.Header.Set("User-Agent", a.userAgent)
-	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
-	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	req.Header.Set("Referer", fmt.Sprintf("https://sso.%s/sso/signin?id=gauth-widget&embedWidget=true&gauthHost=https://sso.%s/sso", a.domain, a.domain))
-	req.Header.Set("Origin", fmt.Sprintf("https://sso.%s", a.domain))
+	// Use realistic browser headers with proper referer chain
+	for key, values := range a.getRealisticBrowserHeaders("") {
+		req.Header[key] = values
+	}
+
+	// Add some randomness to the request timing
+	time.Sleep(time.Duration(100+rand.Intn(200)) * time.Millisecond)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
 		return "", "", fmt.Errorf("login page request failed: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if resp.StatusCode == 403 {
+		// Cloudflare blocked us, try with different headers
+		return "", "", fmt.Errorf("blocked by Cloudflare - try using different IP or wait before retrying")
+	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -416,6 +476,11 @@ func (a *GarthAuthenticator) authenticate(ctx context.Context, username, passwor
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", a.userAgent)
+	req.Header.Set("Referer", fmt.Sprintf("https://sso.%s/sso/signin", a.domain))
+	req.Header.Set("Origin", fmt.Sprintf("https://sso.%s", a.domain))
+
+	// Add some delay to simulate typing
+	time.Sleep(time.Duration(800+rand.Intn(400)) * time.Millisecond)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
@@ -466,14 +531,12 @@ func (a *GarthAuthenticator) ExchangeToken(ctx context.Context, token *OAuth1Tok
 	return a.exchangeOAuth1ForOAuth2Token(ctx, token)
 }
 
-// Removed exchangeTicketForToken method - no longer needed
-
 func (a *GarthAuthenticator) getEnhancedBrowserHeaders(referrer string) http.Header {
 	u, _ := url.Parse(referrer)
 	origin := fmt.Sprintf("%s://%s", u.Scheme, u.Host)
 
 	return http.Header{
-		"User-Agent":                {"GCMv3"},
+		"User-Agent":                {a.userAgent},
 		"Accept":                    {"text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"},
 		"Accept-Language":           {"en-US,en;q=0.9"},
 		"Connection":                {"keep-alive"},
@@ -490,34 +553,35 @@ func (a *GarthAuthenticator) getEnhancedBrowserHeaders(referrer string) http.Hea
 }
 
 func getCSRFToken(html string) (string, string, error) {
-	ltPatterns := []string{
-		`name="lt"\s+value="([^"]+)"`,
-		`name="lt"\s+type="hidden"\s+value="([^"]+)"`,
-		`<input[^>]*name="lt"[^>]*value="([^"]+)"[^>]*>`,
+	// Extract login ticket (lt) from hidden input field
+	re := regexp.MustCompile(`<input\s+type="hidden"\s+name="lt"\s+value="([^"]+)"\s*/>`)
+	matches := re.FindStringSubmatch(html)
+	if len(matches) > 1 {
+		return matches[1], "lt", nil
 	}
 
-	for _, pattern := range ltPatterns {
-		re := regexp.MustCompile(pattern)
-		matches := re.FindStringSubmatch(html)
-		if len(matches) > 1 {
-			return matches[1], "lt", nil
-		}
+	// Extract CSRF token as fallback
+	re = regexp.MustCompile(`<input\s+type="hidden"\s+name="_csrf"\s+value="([^"]+)"\s*/>`)
+	matches = re.FindStringSubmatch(html)
+	if len(matches) > 1 {
+		return matches[1], "_csrf", nil
 	}
 
-	csrfPatterns := []string{
-		`name="_csrf"\s+value="([^"]+)"`,
-		`"csrfToken":"([^"]+)"`,
+	// Try alternative CSRF token pattern
+	re = regexp.MustCompile(`"csrfToken":"([^"]+)"`)
+	matches = re.FindStringSubmatch(html)
+	if len(matches) > 1 {
+		return matches[1], "_csrf", nil
 	}
 
-	for _, pattern := range csrfPatterns {
-		re := regexp.MustCompile(pattern)
-		matches := re.FindStringSubmatch(html)
-		if len(matches) > 1 {
-			return matches[1], "_csrf", nil
-		}
+	// If we get here, we didn't find a token
+	// Log and save the response for debugging
+	log.Printf("Failed to find authentication token in HTML response")
+	debugFilename := fmt.Sprintf("debug/oauth1_response_%d.html", time.Now().UnixNano())
+	if err := os.WriteFile(debugFilename, []byte(html), 0644); err != nil {
+		log.Printf("Failed to write debug file: %v", err)
 	}
-
-	return "", "", errors.New("no authentication token found")
+	return "", "", fmt.Errorf("no authentication token found in HTML response; response written to %s", debugFilename)
 }
 
 // RefreshToken implements token refresh functionality
@@ -592,7 +656,7 @@ func (a *GarthAuthenticator) handleMFA(ctx context.Context, username, password, 
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "GCMv3")
+	req.Header.Set("User-Agent", a.userAgent)
 
 	resp, err := a.client.Do(req)
 	if err != nil {
