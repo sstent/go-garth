@@ -615,7 +615,7 @@ func TestWorkoutService_Export(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				expectedPath := "/workout-service/workout/" + tt.workoutID + "/export/" + tt.format
+				expectedPath := "/download-service/export/" + tt.format + "/workout/" + tt.workoutID
 				if r.URL.Path != expectedPath {
 					t.Errorf("expected path %s, got %s", expectedPath, r.URL.Path)
 				}

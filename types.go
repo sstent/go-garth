@@ -26,7 +26,7 @@ type OAuth2Token struct {
 
 // IsExpired checks if the token has expired
 func (t *OAuth2Token) IsExpired() bool {
-	return time.Now().After(t.Expiry)
+	return time.Now().After(time.Unix(t.ExpiresAt, 0))
 }
 
 // Token represents unified authentication credentials
@@ -39,18 +39,18 @@ type Token struct {
 
 // IsExpired checks if the OAuth2 token has expired
 func (t *Token) IsExpired() bool {
-	if t.OAuth2 == nil {
+	if t.OAuth2Token == nil {
 		return true
 	}
-	return t.OAuth2.IsExpired()
+	return t.OAuth2Token.IsExpired()
 }
 
 // NeedsRefresh checks if token needs refresh (within 5 min expiry window)
 func (t *Token) NeedsRefresh() bool {
-	if t.OAuth2 == nil {
+	if t.OAuth2Token == nil {
 		return true
 	}
-	return time.Now().Add(5 * time.Minute).After(t.OAuth2.Expiry)
+	return time.Now().Add(5 * time.Minute).After(time.Unix(t.OAuth2Token.ExpiresAt, 0))
 }
 
 // UserProfile represents Garmin user profile information

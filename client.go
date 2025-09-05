@@ -30,7 +30,7 @@ func NewAuthTransport(auth *GarthAuthenticator, storage TokenStorage, base http.
 		base:      base,
 		auth:      auth,
 		storage:   storage,
-		userAgent: "GarthClient/1.0",
+		userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
 	}
 }
 
@@ -61,6 +61,7 @@ func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Add Authorization header
 	req.Header.Set("Authorization", "Bearer "+token.OAuth2Token.AccessToken)
 	req.Header.Set("User-Agent", t.userAgent)
+	req.Header.Set("Referer", "https://sso.garmin.com/sso/signin")
 
 	// Execute request with retry logic
 	var resp *http.Response
