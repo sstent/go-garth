@@ -59,7 +59,7 @@ func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	// Add Authorization header
-	req.Header.Set("Authorization", "Bearer "+token.OAuth2Token.AccessToken)
+	req.Header.Set("Authorization", "Bearer "+token.AccessToken)
 	req.Header.Set("User-Agent", t.userAgent)
 	req.Header.Set("Referer", "https://sso.garmin.com/sso/signin")
 
@@ -85,7 +85,7 @@ func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 			if err != nil {
 				return nil, err
 			}
-			req.Header.Set("Authorization", "Bearer "+token.OAuth2Token.AccessToken)
+			req.Header.Set("Authorization", "Bearer "+token.AccessToken)
 			continue
 		}
 
@@ -123,7 +123,7 @@ func (t *AuthTransport) refreshToken(ctx context.Context, token *Token) (*Token,
 	}
 
 	// Perform refresh
-	newToken, err := t.auth.RefreshToken(ctx, token.OAuth2Token.RefreshToken)
+	newToken, err := t.auth.RefreshToken(ctx, token.RefreshToken)
 	if err != nil {
 		return nil, err
 	}

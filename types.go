@@ -8,49 +8,23 @@ import (
 
 // Unified Token Definitions
 
-// OAuth1Token represents OAuth1 credentials
-type OAuth1Token struct {
-	Token  string
-	Secret string
-}
-
-// OAuth2Token represents OAuth2 credentials
-type OAuth2Token struct {
-	AccessToken  string `json:"access_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
-	ExpiresAt    int64  `json:"expires_at"`
-	RefreshToken string `json:"refresh_token"`
-	Scope        string `json:"scope"`
-}
-
-// IsExpired checks if the token has expired
-func (t *OAuth2Token) IsExpired() bool {
-	return time.Now().After(time.Unix(t.ExpiresAt, 0))
-}
-
-// Token represents unified authentication credentials
+// Token represents authentication credentials
 type Token struct {
-	Domain      string       `json:"domain"`
-	OAuth1Token *OAuth1Token `json:"oauth1_token"`
-	OAuth2Token *OAuth2Token `json:"oauth2_token"`
-	UserProfile *UserProfile `json:"user_profile"`
+	AccessToken  string       `json:"access_token"`
+	RefreshToken string       `json:"refresh_token"`
+	ExpiresAt    int64        `json:"expires_at"`
+	Domain       string       `json:"domain"`
+	UserProfile  *UserProfile `json:"user_profile"`
 }
 
-// IsExpired checks if the OAuth2 token has expired
+// IsExpired checks if the token has expired (with 60 second buffer)
 func (t *Token) IsExpired() bool {
-	if t.OAuth2Token == nil {
-		return true
-	}
-	return t.OAuth2Token.IsExpired()
+	return time.Now().Unix() >= (t.ExpiresAt - 60)
 }
 
 // NeedsRefresh checks if token needs refresh (within 5 min expiry window)
 func (t *Token) NeedsRefresh() bool {
-	if t.OAuth2Token == nil {
-		return true
-	}
-	return time.Now().Add(5 * time.Minute).After(time.Unix(t.OAuth2Token.ExpiresAt, 0))
+	return time.Now().Unix() >= (t.ExpiresAt - 300)
 }
 
 // UserProfile represents Garmin user profile information

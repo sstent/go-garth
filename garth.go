@@ -32,7 +32,6 @@ package garth
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"os"
 	"strconv"
@@ -41,14 +40,11 @@ import (
 
 // Authenticator defines the authentication interface
 type Authenticator interface {
-	// Login authenticates with Garmin services using OAuth1/OAuth2 hybrid flow
+	// Login authenticates with Garmin services using OAuth2 flow
 	Login(ctx context.Context, username, password, mfaToken string) (*Token, error)
 
 	// RefreshToken refreshes an expired OAuth2 access token
 	RefreshToken(ctx context.Context, refreshToken string) (*Token, error)
-
-	// ExchangeToken exchanges OAuth1 token for OAuth2 token
-	ExchangeToken(ctx context.Context, oauth1Token *OAuth1Token) (*Token, error)
 
 	// GetClient returns an authenticated HTTP client
 	GetClient() *http.Client
@@ -88,17 +84,4 @@ func NewClientOptionsFromEnv() ClientOptions {
 	opts.Storage = NewMemoryStorage()
 
 	return opts
-}
-
-// getRequestToken retrieves OAuth1 request token
-// getRequestToken retrieves OAuth1 request token
-func getRequestToken(a Authenticator, ctx context.Context) (*OAuth1Token, error) {
-	// Implementation will be added in next step
-	return nil, errors.New("not implemented")
-}
-
-// authorizeRequestToken authorizes OAuth1 token through SSO
-func authorizeRequestToken(a Authenticator, ctx context.Context, token *OAuth1Token) error {
-	// Implementation will be added in next step
-	return errors.New("not implemented")
 }

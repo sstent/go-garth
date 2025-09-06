@@ -59,27 +59,27 @@ func TestRealAuthentication(t *testing.T) {
 			}
 
 			log.Printf("Authentication successful! Token details:")
-			log.Printf("Access Token: %s", token.OAuth2Token.AccessToken)
-			log.Printf("Expires At: %d", token.OAuth2Token.ExpiresAt)
-			log.Printf("Refresh Token: %s", token.OAuth2Token.RefreshToken)
+			log.Printf("Access Token: %s", token.AccessToken)
+			log.Printf("Expires At: %d", token.ExpiresAt)
+			log.Printf("Refresh Token: %s", token.RefreshToken)
 
 			// Verify token storage
 			storedToken, err := storage.GetToken()
 			if err != nil {
 				t.Fatalf("Token storage verification failed: %v", err)
 			}
-			if storedToken.OAuth2Token.AccessToken != token.OAuth2Token.AccessToken {
+			if storedToken.AccessToken != token.AccessToken {
 				t.Fatal("Stored token doesn't match authenticated token")
 			}
 
 			log.Println("Token storage verification successful")
 
 			// Test token refresh
-			newToken, err := auth.RefreshToken(ctx, token.OAuth2Token.RefreshToken)
+			newToken, err := auth.RefreshToken(ctx, token.RefreshToken)
 			if err != nil {
 				t.Fatalf("Token refresh failed: %v", err)
 			}
-			if newToken.OAuth2Token.AccessToken == token.OAuth2Token.AccessToken {
+			if newToken.AccessToken == token.AccessToken {
 				t.Fatal("Refreshed token should be different from original")
 			}
 			log.Println("Token refresh successful")
