@@ -36,26 +36,39 @@ type SessionData struct {
 	AuthToken string `json:"auth_token"`
 }
 
+// ActivityType represents the type of activity
+type ActivityType struct {
+	TypeID       int    `json:"typeId"`
+	TypeKey      string `json:"typeKey"`
+	ParentTypeID *int   `json:"parentTypeId,omitempty"`
+}
+
+// EventType represents the event type of an activity
+type EventType struct {
+	TypeID  int    `json:"typeId"`
+	TypeKey string `json:"typeKey"`
+}
+
 // Activity represents a Garmin Connect activity
 type Activity struct {
-	ActivityID      int64   `json:"activityId"`
-	ActivityName    string  `json:"activityName"`
-	Description     string  `json:"description"`
-	StartTimeLocal  string  `json:"startTimeLocal"`
-	StartTimeGMT    string  `json:"startTimeGMT"`
-	ActivityType    string  `json:"activityType"`
-	EventType       string  `json:"eventType"`
-	Distance        float64 `json:"distance"`
-	Duration        float64 `json:"duration"`
-	ElapsedDuration float64 `json:"elapsedDuration"`
-	MovingDuration  float64 `json:"movingDuration"`
-	ElevationGain   float64 `json:"elevationGain"`
-	ElevationLoss   float64 `json:"elevationLoss"`
-	AverageSpeed    float64 `json:"averageSpeed"`
-	MaxSpeed        float64 `json:"maxSpeed"`
-	Calories        float64 `json:"calories"`
-	AverageHR       int     `json:"averageHR"`
-	MaxHR           int     `json:"maxHR"`
+	ActivityID      int64        `json:"activityId"`
+	ActivityName    string       `json:"activityName"`
+	Description     string       `json:"description"`
+	StartTimeLocal  string       `json:"startTimeLocal"`
+	StartTimeGMT    string       `json:"startTimeGMT"`
+	ActivityType    ActivityType `json:"activityType"`
+	EventType       EventType    `json:"eventType"`
+	Distance        float64      `json:"distance"`
+	Duration        float64      `json:"duration"`
+	ElapsedDuration float64      `json:"elapsedDuration"`
+	MovingDuration  float64      `json:"movingDuration"`
+	ElevationGain   float64      `json:"elevationGain"`
+	ElevationLoss   float64      `json:"elevationLoss"`
+	AverageSpeed    float64      `json:"averageSpeed"`
+	MaxSpeed        float64      `json:"maxSpeed"`
+	Calories        float64      `json:"calories"`
+	AverageHR       float64      `json:"averageHR"`
+	MaxHR           float64      `json:"maxHR"`
 }
 
 // OAuth1Token represents OAuth1 token response
@@ -734,7 +747,7 @@ func main() {
 	fmt.Printf("\n=== Recent Activities ===\n")
 	for i, activity := range activities {
 		fmt.Printf("%d. %s\n", i+1, activity.ActivityName)
-		fmt.Printf("   Type: %s\n", activity.ActivityType)
+		fmt.Printf("   Type: %s\n", activity.ActivityType.TypeKey)
 		fmt.Printf("   Date: %s\n", activity.StartTimeLocal)
 		if activity.Distance > 0 {
 			fmt.Printf("   Distance: %.2f km\n", activity.Distance/1000)
