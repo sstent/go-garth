@@ -39,10 +39,10 @@ func TestBaseData_List(t *testing.T) {
 	maxWorkers := 3
 
 	// Execute
-	results, err := mockData.List(end, days, c, maxWorkers)
+	results, errs := mockData.List(end, days, c, maxWorkers)
 
 	// Verify
-	assert.NoError(t, err)
+	assert.Empty(t, errs)
 	assert.Len(t, results, days)
 	assert.Contains(t, results, "data for 2023-06-15")
 	assert.Contains(t, results, "data for 2023-06-11")
@@ -65,10 +65,10 @@ func TestBaseData_List_ErrorHandling(t *testing.T) {
 	maxWorkers := 2
 
 	// Execute
-	results, err := mockData.List(end, days, c, maxWorkers)
+	results, errs := mockData.List(end, days, c, maxWorkers)
 
 	// Verify
-	assert.Error(t, err)
-	assert.Equal(t, "bad luck day", err.Error())
-	assert.Len(t, results, 4) // Should have some results before error
+	assert.Len(t, errs, 1)
+	assert.Equal(t, "bad luck day", errs[0].Error())
+	assert.Len(t, results, 4) // Should have results for non-error days
 }

@@ -67,8 +67,8 @@ func (b *BaseData) Get(day time.Time, c *client.Client) (interface{}, error) {
 // Returns:
 //
 //	[]interface{}: Slice of results (order matches date range)
-//	error: First error encountered during processing, if any
-func (b *BaseData) List(end time.Time, days int, c *client.Client, maxWorkers int) ([]interface{}, error) {
+//	[]error: Slice of errors encountered during processing
+func (b *BaseData) List(end time.Time, days int, c *client.Client, maxWorkers int) ([]interface{}, []error) {
 	if maxWorkers < 1 {
 		maxWorkers = 1
 	}
@@ -82,8 +82,7 @@ func (b *BaseData) List(end time.Time, days int, c *client.Client, maxWorkers in
 	var wg sync.WaitGroup
 	workCh := make(chan time.Time, days)
 	resultsCh := make(chan interface{}, days)
-	errCh := make(chan error, 1)
-	done := make(chan bool)
+	errCh := make(chan error, days)
 
 	// Worker function
 	worker := func() {
@@ -91,11 +90,8 @@ func (b *BaseData) List(end time.Time, days int, c *client.Client, maxWorkers in
 		for date := range workCh {
 			result, err := b.Get(date, c)
 			if err != nil {
-				select {
-				case errCh <- err:
-				default:
-				}
-				return
+				errCh <- err
+				continue
 			}
 			resultsCh <- result
 		}
@@ -115,28 +111,34 @@ func (b *BaseData) List(end time.Time, days int, c *client.Client, maxWorkers in
 		close(workCh)
 	}()
 
-	// Close results channel when all workers finish
+	// Close channels when all workers finish
 	go func() {
 		wg.Wait()
 		close(resultsCh)
-		done <- true
+		close(errCh)
 	}()
 
-	// Collect results
+	// Collect results and errors
 	var results []interface{}
-	var err error
+	var errs []error
 
-collect:
-	for {
+	// Collect results until both channels are closed
+	for resultsCh != nil || errCh != nil {
 		select {
-		case result := <-resultsCh:
+		case result, ok := <-resultsCh:
+			if !ok {
+				resultsCh = nil
+				continue
+			}
 			results = append(results, result)
-		case err = <-errCh:
-			break collect
-		case <-done:
-			break collect
+		case err, ok := <-errCh:
+			if !ok {
+				errCh = nil
+				continue
+			}
+			errs = append(errs, err)
 		}
 	}
 
-	return results, err
+	return results, errs
 }
