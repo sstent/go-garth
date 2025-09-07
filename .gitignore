@@ -5,6 +5,10 @@
 .vscode/
 .idea/
 
+#code samples
+garth/
+
+
 # Build artifacts
 bin/
 dist/
