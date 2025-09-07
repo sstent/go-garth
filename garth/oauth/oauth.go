@@ -145,8 +145,10 @@ func ExchangeToken(oauth1Token *types.OAuth1Token) (*types.OAuth2Token, error) {
 		return nil, fmt.Errorf("failed to decode OAuth2 token: %w", err)
 	}
 
-	// Set creation time for expiration tracking
-	oauth2Token.CreatedAt = time.Now()
+	// Set expiration time
+	if oauth2Token.ExpiresIn > 0 {
+		oauth2Token.ExpiresAt = time.Now().Add(time.Duration(oauth2Token.ExpiresIn) * time.Second)
+	}
 
 	return &oauth2Token, nil
 }

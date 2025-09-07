@@ -143,3 +143,12 @@ func Min(a, b int) int {
 	}
 	return b
 }
+
+// DateRange generates a date range from end date backwards for n days
+func DateRange(end time.Time, days int) []time.Time {
+	dates := make([]time.Time, days)
+	for i := 0; i < days; i++ {
+		dates[i] = end.AddDate(0, 0, -i)
+	}
+	return dates
+}

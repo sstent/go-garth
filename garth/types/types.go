@@ -72,7 +72,8 @@ type OAuth2Token struct {
 	ExpiresIn    int       `json:"expires_in"`
 	RefreshToken string    `json:"refresh_token"`
 	Scope        string    `json:"scope"`
-	CreatedAt    time.Time // Added for expiration tracking
+	CreatedAt    time.Time // Used for expiration tracking
+	ExpiresAt    time.Time // Computed expiration time
 }
 
 // OAuthConsumer represents OAuth consumer credentials

@@ -52,9 +52,14 @@ func NewClient(domain string) (*Client, error) {
 // Login authenticates to Garmin Connect using SSO
 func (c *Client) Login(email, password string) error {
 	ssoClient := sso.NewClient(c.Domain)
-	oauth2Token, err := ssoClient.Login(email, password)
+	oauth2Token, mfaContext, err := ssoClient.Login(email, password)
 	if err != nil {
 		return fmt.Errorf("SSO login failed: %w", err)
+	}
+
+	// Handle MFA required
+	if mfaContext != nil {
+		return fmt.Errorf("MFA required - not implemented yet")
 	}
 
 	c.OAuth2Token = oauth2Token
