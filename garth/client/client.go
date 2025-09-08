@@ -66,20 +66,22 @@ func (c *Client) Login(email, password string) error {
 	c.AuthToken = fmt.Sprintf("%s %s", oauth2Token.TokenType, oauth2Token.AccessToken)
 
 	// Get user profile to set username
-	if err := c.GetUserProfile(); err != nil {
+	profile, err := c.GetUserProfile()
+	if err != nil {
 		return fmt.Errorf("failed to get user profile after login: %w", err)
 	}
+	c.Username = profile.UserName
 
 	return nil
 }
 
-// GetUserProfile retrieves the current user's profile
-func (c *Client) GetUserProfile() error {
+// GetUserProfile retrieves the current user's full profile
+func (c *Client) GetUserProfile() (*UserProfile, error) {
 	profileURL := fmt.Sprintf("https://connectapi.%s/userprofile-service/socialProfile", c.Domain)
 
 	req, err := http.NewRequest("GET", profileURL, nil)
 	if err != nil {
-		return fmt.Errorf("failed to create profile request: %w", err)
+		return nil, fmt.Errorf("failed to create profile request: %w", err)
 	}
 
 	req.Header.Set("Authorization", c.AuthToken)
@@ -87,26 +89,21 @@ func (c *Client) GetUserProfile() error {
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to get user profile: %w", err)
+		return nil, fmt.Errorf("failed to get user profile: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("profile request failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf("profile request failed with status %d: %s", resp.StatusCode, string(body))
 	}
 
-	var profile map[string]interface{}
+	var profile UserProfile
 	if err := json.NewDecoder(resp.Body).Decode(&profile); err != nil {
-		return fmt.Errorf("failed to parse profile: %w", err)
+		return nil, fmt.Errorf("failed to parse profile: %w", err)
 	}
 
-	if username, ok := profile["userName"].(string); ok {
-		c.Username = username
-		return nil
-	}
-
-	return fmt.Errorf("username not found in profile response")
+	return &profile, nil
 }
 
 // GetActivities retrieves recent activities

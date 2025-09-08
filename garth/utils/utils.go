@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -151,4 +152,66 @@ func DateRange(end time.Time, days int) []time.Time {
 		dates[i] = end.AddDate(0, 0, -i)
 	}
 	return dates
+}
+
+// CamelToSnake converts a camelCase string to snake_case
+func CamelToSnake(s string) string {
+	matchFirstCap := regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap := regexp.MustCompile("([a-z0-9])([A-Z])")
+
+	snake := matchFirstCap.ReplaceAllString(s, "${1}_${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}_${2}")
+	return strings.ToLower(snake)
+}
+
+// CamelToSnakeDict recursively converts map keys from camelCase to snake_case
+func CamelToSnakeDict(m map[string]interface{}) map[string]interface{} {
+	snakeDict := make(map[string]interface{})
+	for k, v := range m {
+		snakeKey := CamelToSnake(k)
+		// Handle nested maps
+		if nestedMap, ok := v.(map[string]interface{}); ok {
+			snakeDict[snakeKey] = CamelToSnakeDict(nestedMap)
+		} else if nestedSlice, ok := v.([]interface{}); ok {
+			// Handle slices of maps
+			var newSlice []interface{}
+			for _, item := range nestedSlice {
+				if itemMap, ok := item.(map[string]interface{}); ok {
+					newSlice = append(newSlice, CamelToSnakeDict(itemMap))
+				} else {
+					newSlice = append(newSlice, item)
+				}
+			}
+			snakeDict[snakeKey] = newSlice
+		} else {
+			snakeDict[snakeKey] = v
+		}
+	}
+	return snakeDict
+}
+
+// FormatEndDate converts various date formats to time.Time
+func FormatEndDate(end interface{}) time.Time {
+	if end == nil {
+		return time.Now().UTC().Truncate(24 * time.Hour)
+	}
+
+	switch v := end.(type) {
+	case string:
+		t, _ := time.Parse("2006-01-02", v)
+		return t
+	case time.Time:
+		return v
+	default:
+		return time.Now().UTC().Truncate(24 * time.Hour)
+	}
+}
+
+// GetLocalizedDateTime converts GMT and local timestamps to localized time
+func GetLocalizedDateTime(gmtTimestamp, localTimestamp int64) time.Time {
+	localDiff := localTimestamp - gmtTimestamp
+	offset := time.Duration(localDiff) * time.Millisecond
+	loc := time.FixedZone("", int(offset.Seconds()))
+	gmtTime := time.Unix(0, gmtTimestamp*int64(time.Millisecond)).UTC()
+	return gmtTime.In(loc)
 }
