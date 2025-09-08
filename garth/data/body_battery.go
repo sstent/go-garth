@@ -1,10 +1,14 @@
 package data
 
 import (
+	"encoding/json"
+	"fmt"
 	"sort"
 	"time"
 
 	"garmin-connect/garth/client"
+	"garmin-connect/garth/errors"
+	"garmin-connect/garth/utils"
 )
 
 // DailyBodyBatteryStress represents complete daily Body Battery and stress data
@@ -109,8 +113,37 @@ func ParseStressReadings(valuesArray [][]int) []StressReading {
 
 // Get implements the Data interface for DailyBodyBatteryStress
 func (d *DailyBodyBatteryStress) Get(day time.Time, client *client.Client) (any, error) {
-	// Implementation to be added
-	return nil, nil
+	dateStr := day.Format("2006-01-02")
+	path := fmt.Sprintf("/wellness-service/wellness/dailyStress/%s", dateStr)
+
+	response, err := client.ConnectAPI(path, "GET", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if response == nil {
+		return nil, nil
+	}
+
+	responseMap, ok := response.(map[string]interface{})
+	if !ok {
+		return nil, &errors.IOError{GarthError: errors.GarthError{
+			Message: "Invalid response format"}}
+	}
+
+	snakeResponse := utils.CamelToSnakeDict(responseMap)
+
+	jsonBytes, err := json.Marshal(snakeResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	var result DailyBodyBatteryStress
+	if err := json.Unmarshal(jsonBytes, &result); err != nil {
+		return nil, err
+	}
+
+	return &result, nil
 }
 
 // List implements the Data interface for concurrent fetching
