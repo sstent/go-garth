@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"garmin-connect/garth/client"
+	"garmin-connect/garth/utils"
 )
 
 // Data defines the interface for Garmin Connect data types.
@@ -70,30 +71,27 @@ func (b *BaseData) Get(day time.Time, c *client.Client) (interface{}, error) {
 //	[]error: Slice of errors encountered during processing
 func (b *BaseData) List(end time.Time, days int, c *client.Client, maxWorkers int) ([]interface{}, []error) {
 	if maxWorkers < 1 {
-		maxWorkers = 1
+		maxWorkers = 10 // Match Python's MAX_WORKERS
 	}
 
-	// Generate date range (end backwards for 'days' days)
-	dates := make([]time.Time, days)
-	for i := 0; i < days; i++ {
-		dates[i] = end.AddDate(0, 0, -i)
+	dates := utils.DateRange(end, days)
+
+	// Define result type for channel
+	type result struct {
+		data interface{}
+		err  error
 	}
 
 	var wg sync.WaitGroup
 	workCh := make(chan time.Time, days)
-	resultsCh := make(chan interface{}, days)
-	errCh := make(chan error, days)
+	resultsCh := make(chan result, days)
 
 	// Worker function
 	worker := func() {
 		defer wg.Done()
 		for date := range workCh {
-			result, err := b.Get(date, c)
-			if err != nil {
-				errCh <- err
-				continue
-			}
-			resultsCh <- result
+			data, err := b.Get(date, c)
+			resultsCh <- result{data: data, err: err}
 		}
 	}
 
@@ -103,7 +101,7 @@ func (b *BaseData) List(end time.Time, days int, c *client.Client, maxWorkers in
 		go worker()
 	}
 
-	// Send work to channel
+	// Send work
 	go func() {
 		for _, date := range dates {
 			workCh <- date
@@ -111,32 +109,20 @@ func (b *BaseData) List(end time.Time, days int, c *client.Client, maxWorkers in
 		close(workCh)
 	}()
 
-	// Close channels when all workers finish
+	// Close results channel when workers are done
 	go func() {
 		wg.Wait()
 		close(resultsCh)
-		close(errCh)
 	}()
 
-	// Collect results and errors
 	var results []interface{}
 	var errs []error
 
-	// Collect results until both channels are closed
-	for resultsCh != nil || errCh != nil {
-		select {
-		case result, ok := <-resultsCh:
-			if !ok {
-				resultsCh = nil
-				continue
-			}
-			results = append(results, result)
-		case err, ok := <-errCh:
-			if !ok {
-				errCh = nil
-				continue
-			}
-			errs = append(errs, err)
+	for r := range resultsCh {
+		if r.err != nil {
+			errs = append(errs, r.err)
+		} else if r.data != nil {
+			results = append(results, r.data)
 		}
 	}
 
