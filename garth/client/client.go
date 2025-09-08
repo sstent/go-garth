@@ -9,6 +9,7 @@ import (
 	"os"
 	"time"
 
+	"garmin-connect/garth/errors"
 	"garmin-connect/garth/sso"
 	"garmin-connect/garth/types"
 )
@@ -31,7 +32,12 @@ func NewClient(domain string) (*Client, error) {
 
 	jar, err := cookiejar.New(nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create cookie jar: %w", err)
+		return nil, &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to create cookie jar",
+				Cause:   err,
+			},
+		}
 	}
 
 	return &Client{
@@ -41,7 +47,13 @@ func NewClient(domain string) (*Client, error) {
 			Timeout: 30 * time.Second,
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
 				if len(via) >= 10 {
-					return fmt.Errorf("too many redirects")
+					return &errors.APIError{
+						GarthHTTPError: errors.GarthHTTPError{
+							GarthError: errors.GarthError{
+								Message: "Too many redirects",
+							},
+						},
+					}
 				}
 				return nil
 			},
@@ -54,12 +66,21 @@ func (c *Client) Login(email, password string) error {
 	ssoClient := sso.NewClient(c.Domain)
 	oauth2Token, mfaContext, err := ssoClient.Login(email, password)
 	if err != nil {
-		return fmt.Errorf("SSO login failed: %w", err)
+		return &errors.AuthenticationError{
+			GarthError: errors.GarthError{
+				Message: "SSO login failed",
+				Cause:   err,
+			},
+		}
 	}
 
 	// Handle MFA required
 	if mfaContext != nil {
-		return fmt.Errorf("MFA required - not implemented yet")
+		return &errors.AuthenticationError{
+			GarthError: errors.GarthError{
+				Message: "MFA required - not implemented yet",
+			},
+		}
 	}
 
 	c.OAuth2Token = oauth2Token
@@ -68,7 +89,12 @@ func (c *Client) Login(email, password string) error {
 	// Get user profile to set username
 	profile, err := c.GetUserProfile()
 	if err != nil {
-		return fmt.Errorf("failed to get user profile after login: %w", err)
+		return &errors.AuthenticationError{
+			GarthError: errors.GarthError{
+				Message: "Failed to get user profile after login",
+				Cause:   err,
+			},
+		}
 	}
 	c.Username = profile.UserName
 
@@ -81,7 +107,14 @@ func (c *Client) GetUserProfile() (*UserProfile, error) {
 
 	req, err := http.NewRequest("GET", profileURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create profile request: %w", err)
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to create profile request",
+					Cause:   err,
+				},
+			},
+		}
 	}
 
 	req.Header.Set("Authorization", c.AuthToken)
@@ -89,18 +122,38 @@ func (c *Client) GetUserProfile() (*UserProfile, error) {
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get user profile: %w", err)
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to get user profile",
+					Cause:   err,
+				},
+			},
+		}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("profile request failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				StatusCode: resp.StatusCode,
+				Response:   string(body),
+				GarthError: errors.GarthError{
+					Message: "Profile request failed",
+				},
+			},
+		}
 	}
 
 	var profile UserProfile
 	if err := json.NewDecoder(resp.Body).Decode(&profile); err != nil {
-		return nil, fmt.Errorf("failed to parse profile: %w", err)
+		return nil, &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to parse profile",
+				Cause:   err,
+			},
+		}
 	}
 
 	return &profile, nil
@@ -116,7 +169,14 @@ func (c *Client) GetActivities(limit int) ([]types.Activity, error) {
 
 	req, err := http.NewRequest("GET", activitiesURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create activities request: %w", err)
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to create activities request",
+					Cause:   err,
+				},
+			},
+		}
 	}
 
 	req.Header.Set("Authorization", c.AuthToken)
@@ -124,18 +184,38 @@ func (c *Client) GetActivities(limit int) ([]types.Activity, error) {
 
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get activities: %w", err)
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to get activities",
+					Cause:   err,
+				},
+			},
+		}
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("activities request failed with status %d: %s", resp.StatusCode, string(body))
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				StatusCode: resp.StatusCode,
+				Response:   string(body),
+				GarthError: errors.GarthError{
+					Message: "Activities request failed",
+				},
+			},
+		}
 	}
 
 	var activities []types.Activity
 	if err := json.NewDecoder(resp.Body).Decode(&activities); err != nil {
-		return nil, fmt.Errorf("failed to parse activities: %w", err)
+		return nil, &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to parse activities",
+				Cause:   err,
+			},
+		}
 	}
 
 	return activities, nil
@@ -151,11 +231,21 @@ func (c *Client) SaveSession(filename string) error {
 
 	data, err := json.MarshalIndent(session, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal session: %w", err)
+		return &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to marshal session",
+				Cause:   err,
+			},
+		}
 	}
 
 	if err := os.WriteFile(filename, data, 0600); err != nil {
-		return fmt.Errorf("failed to write session file: %w", err)
+		return &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to write session file",
+				Cause:   err,
+			},
+		}
 	}
 
 	return nil
@@ -165,12 +255,22 @@ func (c *Client) SaveSession(filename string) error {
 func (c *Client) LoadSession(filename string) error {
 	data, err := os.ReadFile(filename)
 	if err != nil {
-		return fmt.Errorf("failed to read session file: %w", err)
+		return &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to read session file",
+				Cause:   err,
+			},
+		}
 	}
 
 	var session types.SessionData
 	if err := json.Unmarshal(data, &session); err != nil {
-		return fmt.Errorf("failed to unmarshal session: %w", err)
+		return &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to unmarshal session",
+				Cause:   err,
+			},
+		}
 	}
 
 	c.Domain = session.Domain

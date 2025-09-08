@@ -2,10 +2,36 @@ package errors
 
 import "fmt"
 
-// AuthenticationError represents authentication failures
-type AuthenticationError struct {
+// GarthError represents the base error type for all custom errors in Garth
+type GarthError struct {
 	Message string
 	Cause   error
+}
+
+func (e *GarthError) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("garth error: %s: %v", e.Message, e.Cause)
+	}
+	return fmt.Sprintf("garth error: %s", e.Message)
+}
+
+// GarthHTTPError represents HTTP-related errors in API calls
+type GarthHTTPError struct {
+	GarthError
+	StatusCode int
+	Response   string
+}
+
+func (e *GarthHTTPError) Error() string {
+	if e.Cause != nil {
+		return fmt.Sprintf("HTTP error (%d): %s: %v", e.StatusCode, e.Response, e.Cause)
+	}
+	return fmt.Sprintf("HTTP error (%d): %s", e.StatusCode, e.Response)
+}
+
+// AuthenticationError represents authentication failures
+type AuthenticationError struct {
+	GarthError
 }
 
 func (e *AuthenticationError) Error() string {
@@ -17,8 +43,7 @@ func (e *AuthenticationError) Error() string {
 
 // OAuthError represents OAuth token-related errors
 type OAuthError struct {
-	Message string
-	Cause   error
+	GarthError
 }
 
 func (e *OAuthError) Error() string {
@@ -30,22 +55,12 @@ func (e *OAuthError) Error() string {
 
 // APIError represents errors from API calls
 type APIError struct {
-	StatusCode int
-	Response   string
-	Cause      error
-}
-
-func (e *APIError) Error() string {
-	if e.Cause != nil {
-		return fmt.Sprintf("API error (status %d): %s: %v", e.StatusCode, e.Response, e.Cause)
-	}
-	return fmt.Sprintf("API error (status %d): %s", e.StatusCode, e.Response)
+	GarthHTTPError
 }
 
 // IOError represents file I/O errors
 type IOError struct {
-	Message string
-	Cause   error
+	GarthError
 }
 
 func (e *IOError) Error() string {
@@ -57,8 +72,8 @@ func (e *IOError) Error() string {
 
 // ValidationError represents input validation failures
 type ValidationError struct {
-	Message string
-	Field   string
+	GarthError
+	Field string
 }
 
 func (e *ValidationError) Error() string {
