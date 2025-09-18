@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,7 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"garmin-connect/pkg/garmin"
 )
@@ -131,11 +134,46 @@ func runListActivities(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Println("Activities:")
-	for _, activity := range activities {
-		fmt.Printf("- ID: %d, Name: %s, Type: %s, Date: %s, Distance: %.2f km, Duration: %.0f s\n",
-			activity.ActivityID, activity.ActivityName, activity.ActivityType,
-			activity.Starttime.Format("2006-01-02 15:04:05"), activity.Distance/1000, activity.Duration)
+	outputFormat := viper.GetString("output")
+
+	switch outputFormat {
+	case "json":
+		data, err := json.MarshalIndent(activities, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal activities to JSON: %w", err)
+		}
+		fmt.Println(string(data))
+	case "csv":
+		writer := csv.NewWriter(os.Stdout)
+		defer writer.Flush()
+
+		writer.Write([]string{"ActivityID", "ActivityName", "ActivityType", "StartTime", "Distance(km)", "Duration(s)"})
+		for _, activity := range activities {
+			writer.Write([]string{
+				fmt.Sprintf("%d", activity.ActivityID),
+				activity.ActivityName,
+				activity.ActivityType,
+				activity.Starttime.Format("2006-01-02 15:04:05"),
+				fmt.Sprintf("%.2f", activity.Distance/1000),
+				fmt.Sprintf("%.0f", activity.Duration),
+			})
+		}
+	case "table":
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetHeader([]string{"ID", "Name", "Type", "Date", "Distance (km)", "Duration (s)"})
+		for _, activity := range activities {
+			table.Append([]string{
+				fmt.Sprintf("%d", activity.ActivityID),
+				activity.ActivityName,
+				activity.ActivityType,
+				activity.Starttime.Format("2006-01-02 15:04:05"),
+				fmt.Sprintf("%.2f", activity.Distance/1000),
+				fmt.Sprintf("%.0f", activity.Duration),
+			})
+		}
+		table.Render()
+	default:
+		return fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
 
 	return nil

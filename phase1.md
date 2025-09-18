@@ -204,7 +204,7 @@ type ActivityDetail struct {
 - [x] Enhanced activity listing with filters
 - [x] Activity detail fetching
 - [x] Search functionality
-- [ ] Table formatting for activity lists
+- [x] Table formatting for activity lists
 - [x] Activity download preparation (basic structure)
 - [x] Date range filtering
 - [x] Activity type filtering
@@ -229,15 +229,15 @@ garth health bodybattery --yesterday
 **Tasks:**
 - [x] Implement all health data commands
 - [x] Add date range parsing utilities
-- [ ] Create consistent output formatting
-- [ ] Add data aggregation options
+- [x] Create consistent output formatting
+- [x] Add data aggregation options
 - [ ] Implement caching for expensive operations
 - [x] Error handling for missing data
 
 **Deliverables:**
 - [x] All health commands working
 - [x] Consistent date filtering across commands
-- [ ] Proper data formatting and display
+- [x] Proper data formatting and display
 
 #### 1B.4: Statistics Commands
 **Duration: 1 day**
@@ -252,14 +252,14 @@ garth stats calories --from 2024-01-01
 **Tasks:**
 - [x] Implement statistics commands
 - [x] Add aggregation periods (day, week, month, year)
-- [ ] Create summary statistics
+- [x] Create summary statistics
 - [ ] Add trend analysis
-- [ ] Implement data export options
+- [x] Implement data export options
 
 **Deliverables:**
 - [x] All stats commands working
 - [x] Multiple aggregation options
-- [ ] Export functionality
+- [x] Export functionality
 
 ---
 
