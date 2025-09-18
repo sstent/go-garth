@@ -3,15 +3,20 @@ package credentials
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/joho/godotenv"
 )
 
 // LoadEnvCredentials loads credentials from .env file
 func LoadEnvCredentials() (email, password, domain string, err error) {
+	// Determine project root (assuming .env is in the project root)
+	projectRoot := "/home/sstent/Projects/go-garth"
+	envPath := filepath.Join(projectRoot, ".env")
+
 	// Load .env file
-	if err := godotenv.Load(); err != nil {
-		return "", "", "", fmt.Errorf("error loading .env file: %w", err)
+	if err := godotenv.Load(envPath); err != nil {
+		return "", "", "", fmt.Errorf("error loading .env file from %s: %w", envPath, err)
 	}
 
 	email = os.Getenv("GARMIN_EMAIL")

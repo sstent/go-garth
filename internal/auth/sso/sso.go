@@ -44,6 +44,11 @@ func NewClient(domain string) *Client {
 func (c *Client) Login(email, password string) (*types.OAuth2Token, *MFAContext, error) {
 	fmt.Printf("Logging in to Garmin Connect (%s) using SSO flow...\n", c.Domain)
 
+	scheme := "https"
+	if strings.HasPrefix(c.Domain, "127.0.0.1") {
+		scheme = "http"
+	}
+
 	// Step 1: Set up SSO parameters
 	ssoURL := fmt.Sprintf("https://sso.%s/sso", c.Domain)
 	ssoEmbedURL := fmt.Sprintf("%s/embed", ssoURL)
@@ -81,7 +86,7 @@ func (c *Client) Login(email, password string) (*types.OAuth2Token, *MFAContext,
 
 	// Step 3: Get signin page and CSRF token
 	fmt.Println("Getting signin page...")
-	signinURL := fmt.Sprintf("https://sso.%s/sso/signin?%s", c.Domain, signinParams.Encode())
+	signinURL := fmt.Sprintf("%s://sso.%s/sso/signin?%s", scheme, c.Domain, signinParams.Encode())
 	req, err = http.NewRequest("GET", signinURL, nil)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create signin request: %w", err)

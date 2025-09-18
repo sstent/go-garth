@@ -15,13 +15,17 @@ import (
 
 // GetOAuth1Token retrieves an OAuth1 token using the provided ticket
 func GetOAuth1Token(domain, ticket string) (*types.OAuth1Token, error) {
+	scheme := "https"
+	if strings.HasPrefix(domain, "127.0.0.1") {
+		scheme = "http"
+	}
 	consumer, err := utils.LoadOAuthConsumer()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load OAuth consumer: %w", err)
 	}
 
-	baseURL := fmt.Sprintf("https://connectapi.%s/oauth-service/oauth/", domain)
-	loginURL := fmt.Sprintf("https://sso.%s/sso/embed", domain)
+	baseURL := fmt.Sprintf("%s://connectapi.%s/oauth-service/oauth/", scheme, domain)
+	loginURL := fmt.Sprintf("%s://sso.%s/sso/embed", scheme, domain)
 	tokenURL := fmt.Sprintf("%spreauthorized?ticket=%s&login-url=%s&accepts-mfa-tokens=true",
 		baseURL, ticket, url.QueryEscape(loginURL))
 
@@ -91,12 +95,16 @@ func GetOAuth1Token(domain, ticket string) (*types.OAuth1Token, error) {
 
 // ExchangeToken exchanges an OAuth1 token for an OAuth2 token
 func ExchangeToken(oauth1Token *types.OAuth1Token) (*types.OAuth2Token, error) {
+	scheme := "https"
+	if strings.HasPrefix(oauth1Token.Domain, "127.0.0.1") {
+		scheme = "http"
+	}
 	consumer, err := utils.LoadOAuthConsumer()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load OAuth consumer: %w", err)
 	}
 
-	exchangeURL := fmt.Sprintf("https://connectapi.%s/oauth-service/oauth/exchange/user/2.0", oauth1Token.Domain)
+	exchangeURL := fmt.Sprintf("%s://connectapi.%s/oauth-service/oauth/exchange/user/2.0", scheme, oauth1Token.Domain)
 
 	// Prepare form data
 	formData := url.Values{}

@@ -1,6 +1,7 @@
 package client_test
 
 import (
+	"crypto/tls"
 	"net/http"
 	"net/url"
 	"testing"
@@ -16,7 +17,7 @@ import (
 
 func TestClient_GetUserProfile(t *testing.T) {
 	// Create mock server returning user profile
-	server := testutils.MockJSONResponse(http.StatusOK, `{
+	server := testutils.MockJSONResponse(http.StatusOK, `{ 
 		"userName": "testuser",
 		"displayName": "Test User",
 		"fullName": "Test User",
@@ -28,7 +29,12 @@ func TestClient_GetUserProfile(t *testing.T) {
 	u, _ := url.Parse(server.URL)
 	c, err := client.NewClient(u.Host)
 	require.NoError(t, err)
-	c.HTTPClient = &http.Client{Timeout: 5 * time.Second}
+	c.HTTPClient = &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
+	}
 	c.AuthToken = "Bearer testtoken"
 
 	// Get user profile
