@@ -8,18 +8,19 @@ import (
 	"os"
 	"time"
 
-	"garmin-connect/garth"
-	"garmin-connect/garth/credentials"
+	"garmin-connect/pkg/garmin"
+	"garmin-connect/internal/auth/credentials"
 )
 
 func main() {
 	// Parse command line flags
-	outputTokens := flag.Bool("tokens", false, "Output OAuth tokens in JSON format")
-	dataType := flag.String("data", "", "Data type to fetch (bodybattery, sleep, hrv, weight)")
-	statsType := flag.String("stats", "", "Stats type to fetch (steps, stress, hydration, intensity, sleep, hrv)")
-	dateStr := flag.String("date", "", "Date in YYYY-MM-DD format (default: yesterday)")
-	days := flag.Int("days", 1, "Number of days to fetch")
-	outputFile := flag.String("output", "", "Output file for JSON results")
+	var outputTokens = flag.Bool("tokens", false, "Output OAuth tokens in JSON format")
+	var dataType = flag.String("data", "", "Data type to fetch (bodybattery, sleep, hrv, weight)")
+	var statsType = flag.String("stats", "", "Stats type to fetch (steps, stress, hydration, intensity, sleep, hrv)")
+
+	var dateStr = flag.String("date", "", "Date in YYYY-MM-DD format (default: yesterday)")
+	var days = flag.Int("days", 1, "Number of days to fetch")
+	var outputFile = flag.String("output", "", "Output file for JSON results")
 	flag.Parse()
 
 	// Load credentials from .env file
@@ -29,7 +30,7 @@ func main() {
 	}
 
 	// Create client
-	garminClient, err := garth.NewClient(domain)
+	garminClient, err := garmin.NewClient(domain)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
@@ -77,13 +78,13 @@ func main() {
 	displayActivities(activities)
 }
 
-func outputTokensJSON(c *garth.Client) {
+func outputTokensJSON(c *garmin.Client) {
 	tokens := struct {
-		OAuth1 *garth.OAuth1Token `json:"oauth1"`
-		OAuth2 *garth.OAuth2Token `json:"oauth2"`
+		OAuth1 *garmin.OAuth1Token `json:"oauth1"`
+		OAuth2 *garmin.OAuth2Token `json:"oauth2"`
 	}{
-		OAuth1: c.OAuth1Token,
-		OAuth2: c.OAuth2Token,
+		OAuth1: c.OAuth1Token(),
+		OAuth2: c.OAuth2Token(),
 	}
 
 	jsonBytes, err := json.MarshalIndent(tokens, "", "  ")
@@ -93,7 +94,7 @@ func outputTokensJSON(c *garth.Client) {
 	fmt.Println(string(jsonBytes))
 }
 
-func handleDataRequest(c *garth.Client, dataType, dateStr string, days int, outputFile string) {
+func handleDataRequest(c *garmin.Client, dataType, dateStr string, days int, outputFile string) {
 	endDate := time.Now().AddDate(0, 0, -1) // default to yesterday
 	if dateStr != "" {
 		parsedDate, err := time.Parse("2006-01-02", dateStr)
@@ -108,17 +109,13 @@ func handleDataRequest(c *garth.Client, dataType, dateStr string, days int, outp
 
 	switch dataType {
 	case "bodybattery":
-		bb := &garth.BodyBatteryData{}
-		result, err = bb.Get(endDate, c)
+		result, err = c.GetBodyBattery(endDate)
 	case "sleep":
-		sleep := &garth.SleepData{}
-		result, err = sleep.Get(endDate, c)
+		result, err = c.GetSleep(endDate)
 	case "hrv":
-		hrv := &garth.HRVData{}
-		result, err = hrv.Get(endDate, c)
+		result, err = c.GetHRV(endDate)
 	case "weight":
-		weight := &garth.WeightData{}
-		result, err = weight.Get(endDate, c)
+		result, err = c.GetWeight(endDate)
 	default:
 		log.Fatalf("Unknown data type: %s", dataType)
 	}
@@ -130,7 +127,7 @@ func handleDataRequest(c *garth.Client, dataType, dateStr string, days int, outp
 	outputResult(result, outputFile)
 }
 
-func handleStatsRequest(c *garth.Client, statsType, dateStr string, days int, outputFile string) {
+func handleStatsRequest(c *garmin.Client, statsType, dateStr string, days int, outputFile string) {
 	endDate := time.Now().AddDate(0, 0, -1) // default to yesterday
 	if dateStr != "" {
 		parsedDate, err := time.Parse("2006-01-02", dateStr)
@@ -140,25 +137,25 @@ func handleStatsRequest(c *garth.Client, statsType, dateStr string, days int, ou
 		endDate = parsedDate
 	}
 
-	var stats garth.Stats
+	var stats garmin.Stats
 	switch statsType {
 	case "steps":
-		stats = garth.NewDailySteps()
+		stats = garmin.NewDailySteps()
 	case "stress":
-		stats = garth.NewDailyStress()
+		stats = garmin.NewDailyStress()
 	case "hydration":
-		stats = garth.NewDailyHydration()
+		stats = garmin.NewDailyHydration()
 	case "intensity":
-		stats = garth.NewDailyIntensityMinutes()
+		stats = garmin.NewDailyIntensityMinutes()
 	case "sleep":
-		stats = garth.NewDailySleep()
+		stats = garmin.NewDailySleep()
 	case "hrv":
-		stats = garth.NewDailyHRV()
+		stats = garmin.NewDailyHRV()
 	default:
 		log.Fatalf("Unknown stats type: %s", statsType)
 	}
 
-	result, err := stats.List(endDate, days, c)
+	result, err := stats.List(endDate, days, c.Client)
 	if err != nil {
 		log.Fatalf("Failed to get %s stats: %v", statsType, err)
 	}
@@ -182,7 +179,7 @@ func outputResult(data interface{}, outputFile string) {
 	}
 }
 
-func displayActivities(activities []garth.Activity) {
+func displayActivities(activities []garmin.Activity) {
 	fmt.Printf("\n=== Recent Activities ===\n")
 	for i, activity := range activities {
 		fmt.Printf("%d. %s\n", i+1, activity.ActivityName)

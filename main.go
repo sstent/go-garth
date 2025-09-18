@@ -5,9 +5,9 @@ import (
 	"log"
 	"time"
 
-	"garmin-connect/garth/client"
-	"garmin-connect/garth/credentials"
-	"garmin-connect/garth/types"
+	"garmin-connect/internal/api/client"
+	"garmin-connect/internal/auth/credentials"
+	types "garmin-connect/pkg/garmin"
 )
 
 func main() {
