@@ -6,8 +6,6 @@ import (
 	"time"
 
 	"garmin-connect/garth/client"
-	"garmin-connect/garth/errors"
-	"garmin-connect/garth/utils"
 )
 
 // SleepScores represents sleep scoring data
@@ -45,43 +43,28 @@ func (d *DailySleepDTO) Get(day time.Time, client *client.Client) (any, error) {
 	path := fmt.Sprintf("/wellness-service/wellness/dailySleepData/%s?nonSleepBufferMinutes=60&date=%s",
 		client.Username, dateStr)
 
-	response, err := client.ConnectAPI(path, "GET", nil)
+	data, err := client.ConnectAPI(path, "GET", nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if response == nil {
+	if len(data) == 0 {
 		return nil, nil
 	}
 
-	responseMap, ok := response.(map[string]interface{})
-	if !ok {
-		return nil, &errors.IOError{GarthError: errors.GarthError{
-			Message: "Invalid response format"}}
+	var response struct {
+		DailySleepDTO *DailySleepDTO  `json:"dailySleepDto"`
+		SleepMovement []SleepMovement `json:"sleepMovement"`
 	}
-
-	snakeResponse := utils.CamelToSnakeDict(responseMap)
-
-	dailySleepDto, exists := snakeResponse["daily_sleep_dto"].(map[string]interface{})
-	if !exists || dailySleepDto["id"] == nil {
-		return nil, nil // No sleep data
-	}
-
-	jsonBytes, err := json.Marshal(snakeResponse)
-	if err != nil {
+	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, err
 	}
 
-	var result struct {
-		DailySleepDTO *DailySleepDTO  `json:"daily_sleep_dto"`
-		SleepMovement []SleepMovement `json:"sleep_movement"`
+	if response.DailySleepDTO == nil {
+		return nil, nil
 	}
 
-	if err := json.Unmarshal(jsonBytes, &result); err != nil {
-		return nil, err
-	}
-
-	return result, nil
+	return response, nil
 }
 
 // List implements the Data interface for concurrent fetching

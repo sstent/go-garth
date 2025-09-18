@@ -6,6 +6,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
+	"garmin-connect/garth/types"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -13,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"garmin-connect/garth/types"
 )
 
 var oauthConsumer *types.OAuthConsumer

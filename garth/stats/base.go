@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -20,26 +21,34 @@ type BaseStats struct {
 
 func (b *BaseStats) List(end time.Time, period int, client *client.Client) ([]interface{}, error) {
 	endDate := utils.FormatEndDate(end)
+	var allData []interface{}
+	var errs []error
 
-	if period > b.PageSize {
-		// Handle pagination - get first page
-		page, err := b.fetchPage(endDate, b.PageSize, client)
-		if err != nil || len(page) == 0 {
-			return page, err
+	for period > 0 {
+		pageSize := b.PageSize
+		if period < pageSize {
+			pageSize = period
 		}
 
-		// Get remaining pages recursively
-		remainingStart := endDate.AddDate(0, 0, -b.PageSize)
-		remainingPeriod := period - b.PageSize
-		remainingData, err := b.List(remainingStart, remainingPeriod, client)
+		page, err := b.fetchPage(endDate, pageSize, client)
 		if err != nil {
-			return page, err
+			errs = append(errs, err)
+			// Continue to next page even if current fails
+		} else {
+			allData = append(page, allData...)
 		}
 
-		return append(remainingData, page...), nil
+		// Move to previous page
+		endDate = endDate.AddDate(0, 0, -pageSize)
+		period -= pageSize
 	}
 
-	return b.fetchPage(endDate, period, client)
+	// Return partial data with aggregated errors
+	var finalErr error
+	if len(errs) > 0 {
+		finalErr = fmt.Errorf("partial failure: %v", errs)
+	}
+	return allData, finalErr
 }
 
 func (b *BaseStats) fetchPage(end time.Time, period int, client *client.Client) ([]interface{}, error) {
@@ -55,24 +64,26 @@ func (b *BaseStats) fetchPage(end time.Time, period int, client *client.Client) 
 		path = strings.Replace(path, "{period}", fmt.Sprintf("%d", period), 1)
 	}
 
-	response, err := client.ConnectAPI(path, "GET", nil)
+	data, err := client.ConnectAPI(path, "GET", nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	if response == nil {
+	if len(data) == 0 {
 		return []interface{}{}, nil
 	}
 
-	responseSlice, ok := response.([]interface{})
-	if !ok || len(responseSlice) == 0 {
+	var responseSlice []map[string]interface{}
+	if err := json.Unmarshal(data, &responseSlice); err != nil {
+		return nil, err
+	}
+
+	if len(responseSlice) == 0 {
 		return []interface{}{}, nil
 	}
 
 	var results []interface{}
-	for _, item := range responseSlice {
-		itemMap := item.(map[string]interface{})
-
+	for _, itemMap := range responseSlice {
 		// Handle nested "values" structure
 		if values, exists := itemMap["values"]; exists {
 			valuesMap := values.(map[string]interface{})

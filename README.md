@@ -64,12 +64,19 @@ Available data types with Get() methods:
 
 ## Stats Types
 Available stats with List() methods:
+
+### Daily Stats
 - `DailySteps`
 - `DailyStress`
 - `DailyHRV`
 - `DailyHydration`
 - `DailyIntensityMinutes`
 - `DailySleep`
+
+### Weekly Stats
+- `WeeklySteps`
+- `WeeklyStress`
+- `WeeklyHRV`
 
 ## Error Handling
 All methods return errors implementing:
@@ -98,7 +105,12 @@ BenchmarkSleepList-8         	   50000	     35124 ns/op (7 days)
 Full API docs: [https://pkg.go.dev/garmin-connect/garth](https://pkg.go.dev/garmin-connect/garth)
 
 ## CLI Tool
-Includes `cmd/garth` CLI for data export:
+Includes `cmd/garth` CLI for data export. Supports both daily and weekly stats:
+
 ```bash
-go run cmd/garth/main.go --email user@example.com --password pass \
-	--data bodybattery --start 2023-01-01 --end 2023-01-07
+# Daily steps
+go run cmd/garth/main.go --data steps --period daily --start 2023-01-01 --end 2023-01-07
+
+# Weekly stress
+go run cmd/garth/main.go --data stress --period weekly --start 2023-01-01 --end 2023-01-28
+```

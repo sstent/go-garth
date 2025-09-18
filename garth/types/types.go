@@ -1,9 +1,29 @@
 package types
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 )
+
+// GarminTime represents Garmin's timestamp format with custom JSON parsing
+type GarminTime struct {
+	time.Time
+}
+
+// UnmarshalJSON handles Garmin's timestamp format
+func (gt *GarminTime) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	t, err := time.Parse("2006-01-02T15:04:05", s)
+	if err != nil {
+		return err
+	}
+	gt.Time = t
+	return nil
+}
 
 // Client represents the Garmin Connect client
 type Client struct {
@@ -63,6 +83,14 @@ type OAuth1Token struct {
 	OAuthTokenSecret string `json:"oauth_token_secret"`
 	MFAToken         string `json:"mfa_token,omitempty"`
 	Domain           string `json:"domain"`
+}
+
+// UserProfile represents a Garmin user profile
+type UserProfile struct {
+	UserName        string     `json:"userName"`
+	DisplayName     string     `json:"displayName"`
+	LevelUpdateDate GarminTime `json:"levelUpdateDate"`
+	// Add other fields as needed from API response
 }
 
 // OAuth2Token represents OAuth2 token response

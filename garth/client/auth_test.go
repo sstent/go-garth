@@ -2,6 +2,7 @@ package client_test
 
 import (
 	"net/http"
+	"net/url"
 	"testing"
 
 	"garmin-connect/garth/testutils"
@@ -25,7 +26,9 @@ func TestClient_Login_Success(t *testing.T) {
 	// Create client with test configuration
 	c, err := client.NewClient("example.com")
 	require.NoError(t, err)
-	c.Domain = ssoServer.URL
+	// Set domain to just the host (without scheme)
+	u, _ := url.Parse(ssoServer.URL)
+	c.Domain = u.Host
 
 	// Perform login
 	err = c.Login("test@example.com", "password")

@@ -59,12 +59,15 @@ func TestStatsEndpoints(t *testing.T) {
 		name string
 		stat stats.Stats
 	}{
-		{"Steps", stats.NewDailySteps()},
-		{"Stress", stats.NewDailyStress()},
-		{"Hydration", stats.NewDailyHydration()},
-		{"IntensityMinutes", stats.NewDailyIntensityMinutes()},
-		{"Sleep", stats.NewDailySleep()},
-		{"HRV", stats.NewDailyHRV()},
+		{"DailySteps", stats.NewDailySteps()},
+		{"DailyStress", stats.NewDailyStress()},
+		{"DailyHydration", stats.NewDailyHydration()},
+		{"DailyIntensityMinutes", stats.NewDailyIntensityMinutes()},
+		{"DailySleep", stats.NewDailySleep()},
+		{"DailyHRV", stats.NewDailyHRV()},
+		{"WeeklySteps", stats.NewWeeklySteps()},
+		{"WeeklyStress", stats.NewWeeklyStress()},
+		{"WeeklyHRV", stats.NewWeeklyHRV()},
 	}
 
 	for _, tt := range tests {
@@ -88,6 +91,44 @@ func TestStatsEndpoints(t *testing.T) {
 
 			if len(resultMap) == 0 {
 				t.Errorf("Empty result map for %s", tt.name)
+			}
+		})
+	}
+}
+
+func TestPagination(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
+	c, err := client.NewClient("garmin.com")
+	if err != nil {
+		t.Fatalf("Failed to create client: %v", err)
+	}
+
+	err = c.LoadSession("test_session.json")
+	if err != nil {
+		t.Skip("No test session available")
+	}
+
+	tests := []struct {
+		name   string
+		stat   stats.Stats
+		period int
+	}{
+		{"DailySteps_30", stats.NewDailySteps(), 30},
+		{"WeeklySteps_60", stats.NewWeeklySteps(), 60},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			end := time.Now().AddDate(0, 0, -1)
+			results, err := tt.stat.List(end, tt.period, c)
+			if err != nil {
+				t.Errorf("List failed: %v", err)
+			}
+			if len(results) != tt.period {
+				t.Errorf("Expected %d results, got %d", tt.period, len(results))
 			}
 		})
 	}
