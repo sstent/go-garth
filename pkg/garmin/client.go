@@ -76,8 +76,31 @@ func (c *Client) GetActivity(activityID int) (*activities.ActivityDetail, error)
 
 // DownloadActivity downloads activity data
 func (c *Client) DownloadActivity(activityID int, opts activities.DownloadOptions) error {
-	// TODO: Implement internalClient.Client.DownloadActivity
-	return fmt.Errorf("not implemented")
+	// TODO: Determine file extension based on format
+	fileExtension := opts.Format
+	if fileExtension == "csv" {
+		fileExtension = "csv"
+	} else if fileExtension == "gpx" {
+		fileExtension = "gpx"
+	} else if fileExtension == "tcx" {
+		fileExtension = "tcx"
+	} else {
+		return fmt.Errorf("unsupported download format: %s", opts.Format)
+	}
+
+	// Construct filename
+	filename := fmt.Sprintf("%d.%s", activityID, fileExtension)
+	if opts.Filename != "" {
+		filename = opts.Filename
+	}
+
+	// Construct output path
+	outputPath := filename
+	if opts.OutputDir != "" {
+		outputPath = filepath.Join(opts.OutputDir, filename)
+	}
+
+	return c.Client.Download(fmt.Sprintf("%d", activityID), outputPath)
 }
 
 // SearchActivities searches for activities by a query string

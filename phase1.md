@@ -290,17 +290,17 @@ func (c *Client) DownloadActivity(id string, opts *DownloadOptions) error {
 ```
 
 **Tasks:**
-- [ ] Research Garmin's download endpoints
-- [ ] Implement format detection and conversion
-- [ ] Add file writing with proper naming
+- [x] Research Garmin's download endpoints
+- [x] Implement format detection and conversion
+- [x] Add file writing with proper naming
 - [ ] Implement progress indication
 - [ ] Add download validation
-- [ ] Error handling for failed downloads
+- [x] Error handling for failed downloads
 
 **Deliverables:**
-- [ ] Working download for at least GPX format
+- [x] Working download for at least GPX format
 - [ ] Progress indication during download
-- [ ] Proper error handling
+- [x] Proper error handling
 
 #### 1C.2: Multi-Format Support
 **Duration: 2 days**

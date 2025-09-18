@@ -56,6 +56,7 @@ var (
 
 	// Flags for downloadActivitiesCmd
 	downloadFormat string
+	outputDir      string
 )
 
 func init() {
@@ -72,6 +73,7 @@ func init() {
 
 	activitiesCmd.AddCommand(downloadActivitiesCmd)
 	downloadActivitiesCmd.Flags().StringVar(&downloadFormat, "format", "gpx", "Download format (gpx, tcx, csv)")
+	downloadActivitiesCmd.Flags().StringVar(&outputDir, "output-dir", ".", "Output directory for downloaded files")
 
 	activitiesCmd.AddCommand(searchActivitiesCmd)
 	searchActivitiesCmd.Flags().StringP("query", "q", "", "Query string to search for activities")
@@ -179,11 +181,11 @@ func runDownloadActivity(cmd *cobra.Command, args []string) error {
 	}
 
 	opts := garmin.DownloadOptions{
-		Format: downloadFormat,
-		// TODO: Add other download options from flags
+		Format:    downloadFormat,
+		OutputDir: outputDir,
 	}
 
-	fmt.Printf("Downloading activity %d in %s format...\n", activityID, downloadFormat)
+	fmt.Printf("Downloading activity %d in %s format to %s...\n", activityID, downloadFormat, outputDir)
 	if err := garminClient.DownloadActivity(activityID, opts); err != nil {
 		return fmt.Errorf("failed to download activity: %w", err)
 	}
