@@ -100,7 +100,30 @@ func (c *Client) DownloadActivity(activityID int, opts activities.DownloadOption
 		outputPath = filepath.Join(opts.OutputDir, filename)
 	}
 
-	return c.Client.Download(fmt.Sprintf("%d", activityID), opts.Format, outputPath)
+	err := c.Client.Download(fmt.Sprintf("%d", activityID), opts.Format, outputPath)
+	if err != nil {
+		return err
+	}
+
+	// Basic validation: check if file is empty
+	fileInfo, err := os.Stat(outputPath)
+	if err != nil {
+		return &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to get file info after download",
+				Cause:   err,
+			},
+		}
+	}
+	if fileInfo.Size() == 0 {
+		return &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Downloaded file is empty",
+			},
+		}
+	}
+
+	return nil
 }
 
 // SearchActivities searches for activities by a query string

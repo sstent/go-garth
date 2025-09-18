@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/olekukonko/tablewriter"
+	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -270,7 +270,20 @@ func runDownloadActivity(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("Starting download of %d activities...\n", len(activitiesToDownload))
-	var downloadedCount int64
+
+	bar := progressbar.NewOptions(len(activitiesToDownload),
+		progressbar.OptionEnableColorCodes(true),
+		progressbar.OptionShowBytes(false),
+		progressbar.OptionSetWidth(15),
+		progressbar.OptionSetDescription("Downloading activities..."),
+		progressbar.OptionSetTheme(progressbar.Theme{
+			Saucer:        "[green]=[reset]",
+			SaucerPadding: " ",
+			BarStart:      "[ ",
+			BarEnd:        " ]",
+		}),
+	)
+
 	for _, activity := range activitiesToDownload {
 		wg.Add(1)
 		sem <- struct{}{}
@@ -282,6 +295,7 @@ func runDownloadActivity(cmd *cobra.Command, args []string) error {
 				activityDetail, err := garminClient.GetActivity(activity.ActivityID)
 				if err != nil {
 					fmt.Printf("Warning: Failed to get activity details for CSV export for activity %d: %v\n", activity.ActivityID, err)
+					bar.Add(1)
 					return
 				}
 
@@ -294,6 +308,7 @@ func runDownloadActivity(cmd *cobra.Command, args []string) error {
 				file, err := os.Create(outputPath)
 				if err != nil {
 					fmt.Printf("Warning: Failed to create CSV file for activity %d: %v\n", activity.ActivityID, err)
+					bar.Add(1)
 					return
 				}
 				defer file.Close()
@@ -323,21 +338,35 @@ func runDownloadActivity(cmd *cobra.Command, args []string) error {
 					Original:  downloadOriginal,
 				}
 
-				fmt.Printf("Downloading activity %d in %s format to %s...\n", activity.ActivityID, downloadFormat, outputDir)
-				if err := garminClient.DownloadActivity(activity.ActivityID, opts); err != nil {
-					fmt.Printf("Warning: Failed to download activity %d: %v\n", activity.ActivityID, err)
-					return
-				}
+				                    outputPath = filepath.Join(outputDir, filename)
+				                }
+				
+				                // Check if file already exists
+				                if _, err := os.Stat(outputPath); err == nil {
+				                    fmt.Printf("Skipping activity %d: file already exists at %s\n", activity.ActivityID, outputPath)
+				                    bar.Add(1)
+				                    return
+				                } else if !os.IsNotExist(err) {
+				                    fmt.Printf("Warning: Failed to check existence of file %s for activity %d: %v\n", outputPath, activity.ActivityID, err)
+				                    bar.Add(1)
+				                    return
+				                }
+				
+				                fmt.Printf("Downloading activity %d in %s format to %s...\n", activity.ActivityID, downloadFormat, outputDir)
+				                if err := garminClient.DownloadActivity(activity.ActivityID, opts); err != nil {
+				                    fmt.Printf("Warning: Failed to download activity %d: %v\n", activity.ActivityID, err)
+				                    bar.Add(1)
+				                    return
+				                }
+				
+				                fmt.Printf("Activity %d downloaded successfully.\n", activity.ActivityID)			}
 
-				fmt.Printf("Activity %d downloaded successfully.\n", activity.ActivityID)
-			}
-
-			atomic.AddInt64(&downloadedCount, 1)
-			fmt.Printf("[%d/%d] Downloaded activity %d.\n", downloadedCount, len(activitiesToDownload), activity.ActivityID)
+			bar.Add(1)
 		}(activity)
 	}
 
 	wg.Wait()
+	bar.Finish()
 	fmt.Println("All downloads finished.")
 
 	return nil

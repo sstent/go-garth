@@ -293,13 +293,13 @@ func (c *Client) DownloadActivity(id string, opts *DownloadOptions) error {
 - [x] Research Garmin's download endpoints
 - [x] Implement format detection and conversion
 - [x] Add file writing with proper naming
-- [ ] Implement progress indication
-- [ ] Add download validation
+- [x] Implement progress indication
+- [x] Add download validation
 - [x] Error handling for failed downloads
 
 **Deliverables:**
 - [x] Working download for at least GPX format
-- [ ] Progress indication during download
+- [x] Progress indication during download
 - [x] Proper error handling
 
 #### 1C.2: Multi-Format Support
@@ -314,7 +314,7 @@ func (c *Client) DownloadActivity(id string, opts *DownloadOptions) error {
 
 **Deliverables:**
 - [x] Support for GPX, TCX, and CSV formats
-- [ ] Format auto-detection
+- [x] Format auto-detection
 - [x] Format-specific download options
 
 #### 1C.3: Batch Download Features
@@ -331,7 +331,7 @@ garth activities download --from 2024-01-01 --to 2024-01-31
 - [x] Add parallel download support
 - [x] Progress bars for multiple downloads
 - [ ] Resume interrupted downloads
-- [ ] Duplicate detection and handling
+- [x] Duplicate detection and handling
 
 **Deliverables:**
 - [x] Batch download working
