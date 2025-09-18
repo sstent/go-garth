@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sstent/go-garth/garth/oauth"
-	"github.com/sstent/go-garth/garth/types"
+	"github.com/sstent/go-garth/internal/auth/oauth"
+	"github.com/sstent/go-garth/pkg/garmin/types"
 )
 
 var (
