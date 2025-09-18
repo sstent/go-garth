@@ -7,8 +7,8 @@ import (
 	"sort"
 	"time"
 
-	"garmin-connect/garth/client"
-	"garmin-connect/garth/utils"
+	"github.com/sstent/go-garth/garth/client"
+	"github.com/sstent/go-garth/garth/utils"
 )
 
 // HRVSummary represents Heart Rate Variability summary data

@@ -1,11 +1,11 @@
 package garth
 
 import (
-	"garmin-connect/garth/client"
-	"garmin-connect/garth/data"
-	"garmin-connect/garth/errors"
-	"garmin-connect/garth/stats"
-	"garmin-connect/garth/types"
+	"github.com/sstent/go-garth/garth/client"
+	"github.com/sstent/go-garth/garth/data"
+	"github.com/sstent/go-garth/garth/errors"
+	"github.com/sstent/go-garth/garth/stats"
+	"github.com/sstent/go-garth/garth/types"
 )
 
 // Re-export main types for convenience

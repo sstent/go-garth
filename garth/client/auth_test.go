@@ -5,13 +5,13 @@ import (
 	"net/url"
 	"testing"
 
-	"garmin-connect/garth/testutils"
+	"github.com/sstent/go-garth/garth/testutils"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"garmin-connect/garth/client"
-	"garmin-connect/garth/errors"
+	"github.com/sstent/go-garth/garth/client"
+	"github.com/sstent/go-garth/garth/errors"
 )
 
 func TestClient_Login_Success(t *testing.T) {

@@ -3,7 +3,7 @@ package users
 import (
 	"time"
 
-	"garmin-connect/garth/client"
+	"github.com/sstent/go-garth/garth/client"
 )
 
 type PowerFormat struct {

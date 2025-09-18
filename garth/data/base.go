@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"garmin-connect/garth/client"
-	"garmin-connect/garth/utils"
+	"github.com/sstent/go-garth/garth/client"
+	"github.com/sstent/go-garth/garth/utils"
 )
 
 // Data defines the interface for Garmin Connect data types.

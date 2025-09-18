@@ -2,11 +2,12 @@ package garth_test
 
 import (
 	"encoding/json"
-	"garmin-connect/garth/client"
-	"garmin-connect/garth/data"
-	"garmin-connect/garth/testutils"
 	"testing"
 	"time"
+
+	"github.com/sstent/go-garth/garth/client"
+	"github.com/sstent/go-garth/garth/data"
+	"github.com/sstent/go-garth/garth/testutils"
 )
 
 func BenchmarkBodyBatteryGet(b *testing.B) {

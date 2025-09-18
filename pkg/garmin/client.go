@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"garmin-connect/garth/errors"
-	"garmin-connect/garth/sso"
-	"garmin-connect/garth/types"
+	"github.com/sstent/go-garth/garth/errors"
+	"github.com/sstent/go-garth/garth/sso"
+	"github.com/sstent/go-garth/garth/types"
 )
 
 // Client represents the Garmin Connect API client
@@ -326,13 +326,18 @@ func (c *Client) Download(activityID string, filePath string) error {
 	return nil
 }
 
-// GetActivities retrieves recent activities
-func (c *Client) GetActivities(limit int) ([]types.Activity, error) {
-	if limit <= 0 {
-		limit = 10
-	}
+// GetActivities retrieves activities filtered by date range
+func (c *Client) GetActivities(start, end time.Time) ([]types.Activity, error) {
+	activitiesURL := fmt.Sprintf("https://connectapi.%s/activitylist-service/activities/search/activities", c.Domain)
 
-	activitiesURL := fmt.Sprintf("https://connectapi.%s/activitylist-service/activities/search/activities?limit=%d&start=0", c.Domain, limit)
+	params := url.Values{}
+	if !start.IsZero() {
+		params.Add("startDate", start.Format("2006-01-02"))
+	}
+	if !end.IsZero() {
+		params.Add("endDate", end.Format("2006-01-02"))
+	}
+	activitiesURL += "?" + params.Encode()
 
 	req, err := http.NewRequest("GET", activitiesURL, nil)
 	if err != nil {

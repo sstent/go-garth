@@ -8,8 +8,8 @@ import (
 	"os"
 	"time"
 
-	"garmin-connect/garth"
-	"garmin-connect/garth/credentials"
+	auth "github.com/sstent/go-garth/internal/auth"
+	garmin "github.com/sstent/go-garth/pkg/garmin"
 )
 
 func main() {
@@ -23,13 +23,13 @@ func main() {
 	flag.Parse()
 
 	// Load credentials from .env file
-	email, password, domain, err := credentials.LoadEnvCredentials()
+	email, password, domain, err := auth.LoadEnvCredentials()
 	if err != nil {
 		log.Fatalf("Failed to load credentials: %v", err)
 	}
 
 	// Create client
-	garminClient, err := garth.NewClient(domain)
+	garminClient, err := garmin.NewClient(domain)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
@@ -77,7 +77,7 @@ func main() {
 	displayActivities(activities)
 }
 
-func outputTokensJSON(c *garth.Client) {
+func outputTokensJSON(c *garmin.Client) {
 	tokens := struct {
 		OAuth1 *garth.OAuth1Token `json:"oauth1"`
 		OAuth2 *garth.OAuth2Token `json:"oauth2"`

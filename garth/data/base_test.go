@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"garmin-connect/garth/client"
+	"github.com/sstent/go-garth/garth/client"
 
 	"github.com/stretchr/testify/assert"
 )

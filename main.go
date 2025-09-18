@@ -5,9 +5,9 @@ import (
 	"log"
 	"time"
 
-	"garmin-connect/garth/client"
-	"garmin-connect/garth/credentials"
-	"garmin-connect/garth/types"
+	"github.com/sstent/go-garth/internal/auth"
+	"github.com/sstent/go-garth/pkg/garmin"
+	"github.com/sstent/go-garth/pkg/garmin/types"
 )
 
 func main() {
