@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -38,9 +40,7 @@ var (
 	downloadActivitiesCmd = &cobra.Command{
 		Use:   "download [activityID]",
 		Short: "Download activity data",
-		Long:  `Download activity data in various formats (e.g., GPX, TCX).`,
-		Args:  cobra.ExactArgs(1),
-		RunE:  runDownloadActivity,
+		        Args:  cobra.RangeArgs(0, 1),		RunE:  runDownloadActivity,
 	}
 
 	searchActivitiesCmd = &cobra.Command{
@@ -61,6 +61,7 @@ var (
 	downloadFormat string
 	outputDir      string
 	downloadOriginal bool
+	downloadAll      bool
 )
 
 func init() {
@@ -79,6 +80,11 @@ func init() {
 	downloadActivitiesCmd.Flags().StringVar(&downloadFormat, "format", "gpx", "Download format (gpx, tcx, fit, csv)")
 	downloadActivitiesCmd.Flags().StringVar(&outputDir, "output-dir", ".", "Output directory for downloaded files")
 	downloadActivitiesCmd.Flags().BoolVar(&downloadOriginal, "original", false, "Download original uploaded file")
+
+	downloadActivitiesCmd.Flags().BoolVar(&downloadAll, "all", false, "Download all activities matching filters")
+	downloadActivitiesCmd.Flags().StringVar(&activityType, "type", "", "Filter activities by type (e.g., running, cycling)")
+	downloadActivitiesCmd.Flags().StringVar(&activityDateFrom, "from", "", "Start date for filtering activities (YYYY-MM-DD)")
+	downloadActivitiesCmd.Flags().StringVar(&activityDateTo, "to", "", "End date for filtering activities (YYYY-MM-DD)")
 
 	activitiesCmd.AddCommand(searchActivitiesCmd)
 	searchActivitiesCmd.Flags().StringP("query", "q", "", "Query string to search for activities")
@@ -169,12 +175,6 @@ func runGetActivity(cmd *cobra.Command, args []string) error {
 }
 
 func runDownloadActivity(cmd *cobra.Command, args []string) error {
-	activityIDStr := args[0]
-	activityID, err := strconv.Atoi(activityIDStr)
-	if err != nil {
-		return fmt.Errorf("invalid activity ID: %w", err)
-	}
-
 	garminClient, err := garmin.NewClient("www.garmin.com") // TODO: Domain should be configurable
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
@@ -185,57 +185,123 @@ func runDownloadActivity(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not logged in: %w", err)
 	}
 
-	if downloadFormat == "csv" {
+	var activitiesToDownload []garmin.Activity
+
+	if downloadAll || len(args) == 0 {
+		opts := garmin.ActivityOptions{
+			ActivityType: activityType,
+		}
+
+		if activityDateFrom != "" {
+			opts.DateFrom, err = time.Parse("2006-01-02", activityDateFrom)
+			if err != nil {
+				return fmt.Errorf("invalid date format for --from: %w", err)
+			}
+		}
+
+		if activityDateTo != "" {
+			opts.DateTo, err = time.Parse("2006-01-02", activityDateTo)
+			if err != nil {
+				return fmt.Errorf("invalid date format for --to: %w", err)
+			}
+		}
+
+		activitiesToDownload, err = garminClient.ListActivities(opts)
+		if err != nil {
+			return fmt.Errorf("failed to list activities for batch download: %w", err)
+		}
+
+		if len(activitiesToDownload) == 0 {
+			fmt.Println("No activities found matching the filters for download.")
+			return nil
+		}
+	} else if len(args) == 1 {
+		activityIDStr := args[0]
+		activityID, err := strconv.Atoi(activityIDStr)
+		if err != nil {
+			return fmt.Errorf("invalid activity ID: %w", err)
+		}
+		// For single download, we need to fetch the activity details to get its name and type
 		activityDetail, err := garminClient.GetActivity(activityID)
 		if err != nil {
-			return fmt.Errorf("failed to get activity details for CSV export: %w", err)
+			return fmt.Errorf("failed to get activity details for download: %w", err)
 		}
-
-		filename := fmt.Sprintf("%d.csv", activityID)
-		outputPath := filename
-		if outputDir != "" {
-			outputPath = filepath.Join(outputDir, filename)
-		}
-
-		file, err := os.Create(outputPath)
-		if err != nil {
-			return fmt.Errorf("failed to create CSV file: %w", err)
-		}
-		defer file.Close()
-
-		writer := csv.NewWriter(file)
-		defer writer.Flush()
-
-		// Write header
-		writer.Write([]string{"ActivityID", "ActivityName", "ActivityType", "StartTime", "Distance(km)", "Duration(s)", "Description"})
-
-		// Write data
-		writer.Write([]string{
-			fmt.Sprintf("%d", activityDetail.ActivityID),
-			activityDetail.ActivityName,
-			activityDetail.ActivityType,
-			activityDetail.Starttime.Format("2006-01-02 15:04:05"),
-			fmt.Sprintf("%.2f", activityDetail.Distance/1000),
-			fmt.Sprintf("%.0f", activityDetail.Duration),
-			activityDetail.Description,
-		})
-
-		fmt.Printf("Activity %d summary exported to %s\n", activityID, outputPath)
-		return nil
+		activitiesToDownload = []garmin.Activity{activityDetail.Activity}
+	} else {
+		return fmt.Errorf("invalid arguments: specify an activity ID or use --all with filters")
 	}
 
-	opts := garmin.DownloadOptions{
-		Format:    downloadFormat,
-		OutputDir: outputDir,
-		Original:  downloadOriginal,
+	fmt.Printf("Starting download of %d activities...\n", len(activitiesToDownload))
+	var downloadedCount int64
+	for _, activity := range activitiesToDownload {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(activity garmin.Activity) {
+			defer wg.Done()
+			defer func() { <-sem }()
+
+			if downloadFormat == "csv" {
+				activityDetail, err := garminClient.GetActivity(activity.ActivityID)
+				if err != nil {
+					fmt.Printf("Warning: Failed to get activity details for CSV export for activity %d: %v\n", activity.ActivityID, err)
+					return
+				}
+
+				filename := fmt.Sprintf("%d.csv", activity.ActivityID)
+				outputPath := filename
+				if outputDir != "" {
+					outputPath = filepath.Join(outputDir, filename)
+				}
+
+				file, err := os.Create(outputPath)
+				if err != nil {
+					fmt.Printf("Warning: Failed to create CSV file for activity %d: %v\n", activity.ActivityID, err)
+					return
+				}
+				defer file.Close()
+
+				writer := csv.NewWriter(file)
+				defer writer.Flush()
+
+				// Write header
+				writer.Write([]string{"ActivityID", "ActivityName", "ActivityType", "StartTime", "Distance(km)", "Duration(s)", "Description"})
+
+				// Write data
+				writer.Write([]string{
+					fmt.Sprintf("%d", activityDetail.ActivityID),
+					activityDetail.ActivityName,
+					activityDetail.ActivityType,
+					activityDetail.Starttime.Format("2006-01-02 15:04:05"),
+					fmt.Sprintf("%.2f", activityDetail.Distance/1000),
+					fmt.Sprintf("%.0f", activityDetail.Duration),
+					activityDetail.Description,
+				})
+
+				fmt.Printf("Activity %d summary exported to %s\n", activity.ActivityID, outputPath)
+			} else {
+				opts := garmin.DownloadOptions{
+					Format:    downloadFormat,
+					OutputDir: outputDir,
+					Original:  downloadOriginal,
+				}
+
+				fmt.Printf("Downloading activity %d in %s format to %s...\n", activity.ActivityID, downloadFormat, outputDir)
+				if err := garminClient.DownloadActivity(activity.ActivityID, opts); err != nil {
+					fmt.Printf("Warning: Failed to download activity %d: %v\n", activity.ActivityID, err)
+					return
+				}
+
+				fmt.Printf("Activity %d downloaded successfully.\n", activity.ActivityID)
+			}
+
+			atomic.AddInt64(&downloadedCount, 1)
+			fmt.Printf("[%d/%d] Downloaded activity %d.\n", downloadedCount, len(activitiesToDownload), activity.ActivityID)
+		}(activity)
 	}
 
-	fmt.Printf("Downloading activity %d in %s format to %s...\n", activityID, downloadFormat, outputDir)
-	if err := garminClient.DownloadActivity(activityID, opts); err != nil {
-		return fmt.Errorf("failed to download activity: %w", err)
-	}
+	wg.Wait()
+	fmt.Println("All downloads finished.")
 
-	fmt.Printf("Activity %d downloaded successfully.\n", activityID)
 	return nil
 }
 

@@ -327,15 +327,15 @@ garth activities download --from 2024-01-01 --to 2024-01-31
 ```
 
 **Tasks:**
-- [ ] Implement batch download with filtering
-- [ ] Add parallel download support
-- [ ] Progress bars for multiple downloads
+- [x] Implement batch download with filtering
+- [x] Add parallel download support
+- [x] Progress bars for multiple downloads
 - [ ] Resume interrupted downloads
 - [ ] Duplicate detection and handling
 
 **Deliverables:**
-- [ ] Batch download working
-- [ ] Parallel processing implemented
+- [x] Batch download working
+- [x] Parallel processing implemented
 - [ ] Resume capability
 
 ---
