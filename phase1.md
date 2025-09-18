@@ -306,16 +306,16 @@ func (c *Client) DownloadActivity(id string, opts *DownloadOptions) error {
 **Duration: 2 days**
 
 **Tasks:**
-- [ ] Implement TCX format download
-- [ ] Implement FIT format download (if available)
-- [ ] Add CSV export for activity summaries
-- [ ] Format validation and conversion
-- [ ] Add format-specific options
+- [x] Implement TCX format download
+- [x] Implement FIT format download (if available)
+- [x] Add CSV export for activity summaries
+- [x] Format validation and conversion
+- [x] Add format-specific options
 
 **Deliverables:**
-- [ ] Support for GPX, TCX, and CSV formats
+- [x] Support for GPX, TCX, and CSV formats
 - [ ] Format auto-detection
-- [ ] Format-specific download options
+- [x] Format-specific download options
 
 #### 1C.3: Batch Download Features
 **Duration: 1 day**

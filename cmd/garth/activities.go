@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/csv"
 	"fmt"
-	"log"
+	"os"
+	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -57,6 +60,7 @@ var (
 	// Flags for downloadActivitiesCmd
 	downloadFormat string
 	outputDir      string
+	downloadOriginal bool
 )
 
 func init() {
@@ -72,8 +76,9 @@ func init() {
 	activitiesCmd.AddCommand(getActivitiesCmd)
 
 	activitiesCmd.AddCommand(downloadActivitiesCmd)
-	downloadActivitiesCmd.Flags().StringVar(&downloadFormat, "format", "gpx", "Download format (gpx, tcx, csv)")
+	downloadActivitiesCmd.Flags().StringVar(&downloadFormat, "format", "gpx", "Download format (gpx, tcx, fit, csv)")
 	downloadActivitiesCmd.Flags().StringVar(&outputDir, "output-dir", ".", "Output directory for downloaded files")
+	downloadActivitiesCmd.Flags().BoolVar(&downloadOriginal, "original", false, "Download original uploaded file")
 
 	activitiesCmd.AddCommand(searchActivitiesCmd)
 	searchActivitiesCmd.Flags().StringP("query", "q", "", "Query string to search for activities")
@@ -180,9 +185,49 @@ func runDownloadActivity(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not logged in: %w", err)
 	}
 
+	if downloadFormat == "csv" {
+		activityDetail, err := garminClient.GetActivity(activityID)
+		if err != nil {
+			return fmt.Errorf("failed to get activity details for CSV export: %w", err)
+		}
+
+		filename := fmt.Sprintf("%d.csv", activityID)
+		outputPath := filename
+		if outputDir != "" {
+			outputPath = filepath.Join(outputDir, filename)
+		}
+
+		file, err := os.Create(outputPath)
+		if err != nil {
+			return fmt.Errorf("failed to create CSV file: %w", err)
+		}
+		defer file.Close()
+
+		writer := csv.NewWriter(file)
+		defer writer.Flush()
+
+		// Write header
+		writer.Write([]string{"ActivityID", "ActivityName", "ActivityType", "StartTime", "Distance(km)", "Duration(s)", "Description"})
+
+		// Write data
+		writer.Write([]string{
+			fmt.Sprintf("%d", activityDetail.ActivityID),
+			activityDetail.ActivityName,
+			activityDetail.ActivityType,
+			activityDetail.Starttime.Format("2006-01-02 15:04:05"),
+			fmt.Sprintf("%.2f", activityDetail.Distance/1000),
+			fmt.Sprintf("%.0f", activityDetail.Duration),
+			activityDetail.Description,
+		})
+
+		fmt.Printf("Activity %d summary exported to %s\n", activityID, outputPath)
+		return nil
+	}
+
 	opts := garmin.DownloadOptions{
 		Format:    downloadFormat,
 		OutputDir: outputDir,
+		Original:  downloadOriginal,
 	}
 
 	fmt.Printf("Downloading activity %d in %s format to %s...\n", activityID, downloadFormat, outputDir)

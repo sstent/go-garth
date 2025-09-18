@@ -100,7 +100,7 @@ func (c *Client) DownloadActivity(activityID int, opts activities.DownloadOption
 		outputPath = filepath.Join(opts.OutputDir, filename)
 	}
 
-	return c.Client.Download(fmt.Sprintf("%d", activityID), outputPath)
+	return c.Client.Download(fmt.Sprintf("%d", activityID), opts.Format, outputPath)
 }
 
 // SearchActivities searches for activities by a query string

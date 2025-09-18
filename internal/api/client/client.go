@@ -331,9 +331,13 @@ func (c *Client) Upload(filePath string) error {
 }
 
 // Download retrieves a file from Garmin Connect
-func (c *Client) Download(activityID string, filePath string) error {
+func (c *Client) Download(activityID string, format string, filePath string) error {
 	params := url.Values{}
 	params.Add("activityId", activityID)
+	// Add format parameter if provided and not empty
+	if format != "" {
+		params.Add("format", format)
+	}
 
 	resp, err := c.ConnectAPI("/download-service/export", "GET", params, nil)
 	if err != nil {
