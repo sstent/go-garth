@@ -158,17 +158,17 @@ var loginCmd = &cobra.Command{
 ```
 
 **Tasks:**
-- [ ] Implement `auth login` with interactive prompts
-- [ ] Add `auth logout` functionality
-- [ ] Create `auth status` command
-- [ ] Implement secure password input
+- [x] Implement `auth login` with interactive prompts
+- [x] Add `auth logout` functionality
+- [x] Create `auth status` command
+- [x] Implement secure password input
 - [ ] Add MFA support (prepare for future)
-- [ ] Session validation and refresh
+- [x] Session validation and refresh
 
 **Deliverables:**
-- [ ] All auth commands working
-- [ ] Secure credential handling
-- [ ] Session persistence working
+- [x] All auth commands working
+- [x] Secure credential handling
+- [x] Session persistence working
 
 #### 1B.2: Activity Commands
 **Duration: 2 days**
@@ -201,19 +201,19 @@ type ActivityDetail struct {
 ```
 
 **Tasks:**
-- [ ] Enhanced activity listing with filters
-- [ ] Activity detail fetching
-- [ ] Search functionality
+- [x] Enhanced activity listing with filters
+- [x] Activity detail fetching
+- [x] Search functionality
 - [ ] Table formatting for activity lists
-- [ ] Activity download preparation (basic structure)
-- [ ] Date range filtering
-- [ ] Activity type filtering
+- [x] Activity download preparation (basic structure)
+- [x] Date range filtering
+- [x] Activity type filtering
 
 **Deliverables:**
-- [ ] `activities list` with all filtering options
-- [ ] `activities get` showing detailed info
-- [ ] `activities search` functionality
-- [ ] Proper error handling and user feedback
+- [x] `activities list` with all filtering options
+- [x] `activities get` showing detailed info
+- [x] `activities search` functionality
+- [x] Proper error handling and user feedback
 
 #### 1B.3: Health Data Commands  
 **Duration: 2 days**
@@ -227,16 +227,16 @@ garth health bodybattery --yesterday
 ```
 
 **Tasks:**
-- [ ] Implement all health data commands
-- [ ] Add date range parsing utilities
+- [x] Implement all health data commands
+- [x] Add date range parsing utilities
 - [ ] Create consistent output formatting
 - [ ] Add data aggregation options
 - [ ] Implement caching for expensive operations
-- [ ] Error handling for missing data
+- [x] Error handling for missing data
 
 **Deliverables:**
-- [ ] All health commands working
-- [ ] Consistent date filtering across commands
+- [x] All health commands working
+- [x] Consistent date filtering across commands
 - [ ] Proper data formatting and display
 
 #### 1B.4: Statistics Commands
@@ -250,15 +250,15 @@ garth stats calories --from 2024-01-01
 ```
 
 **Tasks:**
-- [ ] Implement statistics commands
-- [ ] Add aggregation periods (day, week, month, year)
+- [x] Implement statistics commands
+- [x] Add aggregation periods (day, week, month, year)
 - [ ] Create summary statistics
 - [ ] Add trend analysis
 - [ ] Implement data export options
 
 **Deliverables:**
-- [ ] All stats commands working
-- [ ] Multiple aggregation options
+- [x] All stats commands working
+- [x] Multiple aggregation options
 - [ ] Export functionality
 
 ---

@@ -1,58 +1,41 @@
 package garmin
 
 import (
-	"garmin-connect/internal/data"
 	"time"
 )
 
-// BodyBatteryData represents Body Battery data.
-type BodyBatteryData = data.DailyBodyBatteryStress
-
-// SleepData represents sleep data.
-type SleepData = data.DailySleepDTO
-
-// HRVData represents HRV data.
-type HRVData = data.HRVData
-
-// WeightData represents weight data.
-type WeightData = data.WeightData
-
-// GetBodyBattery retrieves Body Battery data for a given date.
-func (c *Client) GetBodyBattery(date time.Time) (*BodyBatteryData, error) {
-	bb := &data.DailyBodyBatteryStress{}
-	result, err := bb.Get(date, c.Client)
-	if err != nil {
-		return nil, err
-	}
-	return result.(*BodyBatteryData), nil
+// SleepData represents sleep summary data
+type SleepData struct {
+	Date                 time.Time `json:"calendarDate"`
+	SleepScore           int       `json:"sleepScore"`
+	TotalSleepSeconds    int       `json:"totalSleepSeconds"`
+	DeepSleepSeconds     int       `json:"deepSleepSeconds"`
+	LightSleepSeconds    int       `json:"lightSleepSeconds"`
+	RemSleepSeconds      int       `json:"remSleepSeconds"`
+	AwakeSleepSeconds    int       `json:"awakeSleepSeconds"`
+	// Add more fields as needed
 }
 
-// GetSleep retrieves sleep data for a given date.
-func (c *Client) GetSleep(date time.Time) (*SleepData, error) {
-	sleep := &data.DailySleepDTO{}
-	result, err := sleep.Get(date, c.Client)
-	if err != nil {
-		return nil, err
-	}
-	return result.(*SleepData), nil
+// HrvData represents Heart Rate Variability data
+type HrvData struct {
+	Date                 time.Time `json:"calendarDate"`
+	HrvValue             float64   `json:"hrvValue"`
+	// Add more fields as needed
 }
 
-// GetHRV retrieves HRV data for a given date.
-func (c *Client) GetHRV(date time.Time) (*HRVData, error) {
-	hrv := &data.HRVData{}
-	result, err := hrv.Get(date, c.Client)
-	if err != nil {
-		return nil, err
-	}
-	return result.(*HRVData), nil
+// StressData represents stress level data
+type StressData struct {
+	Date                 time.Time `json:"calendarDate"`
+	StressLevel          int       `json:"stressLevel"`
+	RestStressLevel      int       `json:"restStressLevel"`
+	// Add more fields as needed
 }
 
-// GetWeight retrieves weight data for a given date.
-func (c *Client) GetWeight(date time.Time) (*WeightData, error) {
-	weight := &data.WeightData{}
-	result, err := weight.Get(date, c.Client)
-	if err != nil {
-		return nil, err
-	}
-	return result.(*WeightData), nil
+// BodyBatteryData represents Body Battery data
+type BodyBatteryData struct {
+	Date                 time.Time `json:"calendarDate"`
+	BatteryLevel         int       `json:"batteryLevel"`
+	Charge               int       `json:"charge"`
+	Drain                int       `json:"drain"`
+	// Add more fields as needed
 }

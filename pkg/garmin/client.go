@@ -1,8 +1,14 @@
 package garmin
 
 import (
+	"fmt"
+	"time"
+
 	internalClient "garmin-connect/internal/api/client"
 	"garmin-connect/internal/types"
+	"garmin-connect/pkg/garmin/activities"
+	"garmin-connect/pkg/garmin/health"
+	"garmin-connect/pkg/garmin/stats"
 )
 
 // Client is the main Garmin Connect client type
@@ -16,7 +22,7 @@ func NewClient(domain string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{Client: c}, nil
+	return &Client{Client: c},
 }
 
 // Login authenticates to Garmin Connect
@@ -34,9 +40,92 @@ func (c *Client) SaveSession(filename string) error {
 	return c.Client.SaveSession(filename)
 }
 
+// RefreshSession refreshes the authentication tokens
+func (c *Client) RefreshSession() error {
+	return c.Client.RefreshSession()
+}
+
 // GetActivities retrieves recent activities
-func (c *Client) GetActivities(limit int) ([]Activity, error) {
-	return c.Client.GetActivities(limit)
+func (c *Client) GetActivities(opts activities.ActivityOptions) ([]Activity, error) {
+	// TODO: Map ActivityOptions to internalClient.Client.GetActivities parameters
+	// For now, just call the internal client's GetActivities with a dummy limit
+	internalActivities, err := c.Client.GetActivities(opts.Limit)
+	if err != nil {
+		return nil, err
+	}
+
+	var garminActivities []Activity
+	for _, act := range internalActivities {
+		garminActivities = append(garminActivities, Activity{
+			ActivityID:   act.ActivityID,
+			ActivityName: act.ActivityName,
+			ActivityType: act.ActivityType,
+			Starttime:    act.Starttime,
+			Distance:     act.Distance,
+			Duration:     act.Duration,
+		})
+	}
+	return garminActivities, nil
+}
+
+// GetActivity retrieves details for a specific activity ID
+func (c *Client) GetActivity(activityID int) (*activities.ActivityDetail, error) {
+	// TODO: Implement internalClient.Client.GetActivity
+	return nil, fmt.Errorf("not implemented")
+}
+
+// DownloadActivity downloads activity data
+func (c *Client) DownloadActivity(activityID int, opts activities.DownloadOptions) error {
+	// TODO: Implement internalClient.Client.DownloadActivity
+	return fmt.Errorf("not implemented")
+}
+
+// SearchActivities searches for activities by a query string
+func (c *Client) SearchActivities(query string) ([]Activity, error) {
+	// TODO: Implement internalClient.Client.SearchActivities
+	return nil, fmt.Errorf("not implemented")
+}
+
+// GetSleepData retrieves sleep data for a specified date range
+func (c *Client) GetSleepData(startDate, endDate time.Time) ([]health.SleepData, error) {
+	// TODO: Implement internalClient.Client.GetSleepData
+	return nil, fmt.Errorf("not implemented")
+}
+
+// GetHrvData retrieves HRV data for a specified number of days
+func (c *Client) GetHrvData(days int) ([]health.HrvData, error) {
+	// TODO: Implement internalClient.Client.GetHrvData
+	return nil, fmt.Errorf("not implemented")
+}
+
+// GetStressData retrieves stress data
+func (c *Client) GetStressData(startDate, endDate time.Time) ([]health.StressData, error) {
+	// TODO: Implement internalClient.Client.GetStressData
+	return nil, fmt.Errorf("not implemented")
+}
+
+// GetBodyBatteryData retrieves Body Battery data
+func (c *Client) GetBodyBatteryData(startDate, endDate time.Time) ([]health.BodyBatteryData, error) {
+	// TODO: Implement internalClient.Client.GetBodyBatteryData
+	return nil, fmt.Errorf("not implemented")
+}
+
+// GetStepsData retrieves steps data for a specified date range
+func (c *Client) GetStepsData(startDate, endDate time.Time) ([]stats.StepsData, error) {
+	// TODO: Implement internalClient.Client.GetStepsData
+	return nil, fmt.Errorf("not implemented")
+}
+
+// GetDistanceData retrieves distance data for a specified date range
+func (c *Client) GetDistanceData(startDate, endDate time.Time) ([]stats.DistanceData, error) {
+	// TODO: Implement internalClient.Client.GetDistanceData
+	return nil, fmt.Errorf("not implemented")
+}
+
+// GetCaloriesData retrieves calories data for a specified date range
+func (c *Client) GetCaloriesData(startDate, endDate time.Time) ([]stats.CaloriesData, error) {
+	// TODO: Implement internalClient.Client.GetCaloriesData
+	return nil, fmt.Errorf("not implemented")
 }
 
 // OAuth1Token returns the OAuth1 token
