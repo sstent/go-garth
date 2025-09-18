@@ -83,7 +83,7 @@ func (c *Client) Login(email, password string) error {
 		}
 	}
 
-	ssoClient := sso.NewClient(host)
+	ssoClient := sso.NewClient(c.Domain)
 	oauth2Token, mfaContext, err := ssoClient.Login(email, password)
 	if err != nil {
 		return &errors.AuthenticationError{
@@ -145,7 +145,7 @@ func (c *Client) GetUserProfile() (*types.UserProfile, error) {
 	if strings.HasPrefix(c.Domain, "127.0.0.1") {
 		scheme = "http"
 	}
-	profileURL := fmt.Sprintf("%s://%s/userprofile-service/socialProfile", scheme, c.Domain)
+	profileURL := fmt.Sprintf("%s://connectapi.%s/userprofile-service/socialProfile", scheme, c.Domain)
 
 	req, err := http.NewRequest("GET", profileURL, nil)
 	if err != nil {
@@ -358,7 +358,12 @@ func (c *Client) GetActivities(limit int) ([]types.Activity, error) {
 		limit = 10
 	}
 
-	activitiesURL := fmt.Sprintf("https://connectapi.%s/activitylist-service/activities/search/activities?limit=%d&start=0", c.Domain, limit)
+	scheme := "https"
+	if strings.HasPrefix(c.Domain, "127.0.0.1") {
+		scheme = "http"
+	}
+
+	activitiesURL := fmt.Sprintf("%s://connectapi.%s/activitylist-service/activities/search/activities?limit=%d&start=0", scheme, c.Domain, limit)
 
 	req, err := http.NewRequest("GET", activitiesURL, nil)
 	if err != nil {
