@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"garmin-connect/internal/auth/credentials"
-	"garmin-connect/pkg/garmin"
+	"go-garth/internal/auth/credentials"
+	"go-garth/pkg/garmin"
 
 	"github.com/spf13/cobra"
 )
@@ -34,7 +34,10 @@ var activitiesCmd = &cobra.Command{
 			log.Fatalf("No existing session found. Please run 'garth login' first.")
 		}
 
-		activities, err := garminClient.GetActivities(5)
+		opts := garmin.ActivityOptions{
+			Limit: 5,
+		}
+		activities, err := garminClient.ListActivities(opts)
 		if err != nil {
 			log.Fatalf("Failed to get activities: %v", err)
 		}

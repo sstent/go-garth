@@ -1,6 +1,6 @@
 package garmin
 
-import "garmin-connect/internal/types"
+import "go-garth/internal/types"
 
 // GarminTime represents Garmin's timestamp format with custom JSON parsing
 type GarminTime = types.GarminTime

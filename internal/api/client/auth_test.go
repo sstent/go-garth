@@ -3,8 +3,8 @@ package client_test
 import (
 	"testing"
 
-	"garmin-connect/internal/api/client"
-	"garmin-connect/internal/auth/credentials"
+	"go-garth/internal/api/client"
+	"go-garth/internal/auth/credentials"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

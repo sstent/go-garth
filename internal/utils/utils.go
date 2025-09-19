@@ -6,7 +6,7 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
-	"garmin-connect/internal/types"
+	"go-garth/internal/types"
 	"net/http"
 	"net/url"
 	"regexp"

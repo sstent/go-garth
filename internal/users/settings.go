@@ -3,7 +3,7 @@ package users
 import (
 	"time"
 
-	"garmin-connect/internal/api/client"
+	"go-garth/internal/api/client"
 )
 
 type PowerFormat struct {

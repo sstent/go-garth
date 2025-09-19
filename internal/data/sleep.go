@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"garmin-connect/internal/api/client"
+	"go-garth/internal/api/client"
 )
 
 // SleepScores represents sleep scoring data

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"garmin-connect/internal/api/client"
+	"go-garth/internal/api/client"
 )
 
 // WeightData represents weight measurement data

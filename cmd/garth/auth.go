@@ -2,13 +2,11 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 
 	"golang.org/x/term"
 
-	"garmin-connect/internal/auth/credentials"
-	"garmin-connect/pkg/garmin"
+	"go-garth/pkg/garmin"
 
 	"github.com/spf13/cobra"
 )

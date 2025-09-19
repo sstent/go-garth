@@ -2,13 +2,13 @@ package garmin
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
-	internalClient "garmin-connect/internal/api/client"
-	"garmin-connect/internal/types"
-	"garmin-connect/pkg/garmin/activities"
-	"garmin-connect/pkg/garmin/health"
-	"garmin-connect/pkg/garmin/stats"
+	internalClient "go-garth/internal/api/client"
+	"go-garth/internal/errors"
+	"go-garth/internal/types"
 )
 
 // Client is the main Garmin Connect client type
@@ -22,7 +22,7 @@ func NewClient(domain string) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Client{Client: c},
+	return &Client{Client: c}, nil
 }
 
 // Login authenticates to Garmin Connect
@@ -45,8 +45,8 @@ func (c *Client) RefreshSession() error {
 	return c.Client.RefreshSession()
 }
 
-// GetActivities retrieves recent activities
-func (c *Client) GetActivities(opts activities.ActivityOptions) ([]Activity, error) {
+// ListActivities retrieves recent activities
+func (c *Client) ListActivities(opts ActivityOptions) ([]Activity, error) {
 	// TODO: Map ActivityOptions to internalClient.Client.GetActivities parameters
 	// For now, just call the internal client's GetActivities with a dummy limit
 	internalActivities, err := c.Client.GetActivities(opts.Limit)
@@ -60,7 +60,7 @@ func (c *Client) GetActivities(opts activities.ActivityOptions) ([]Activity, err
 			ActivityID:   act.ActivityID,
 			ActivityName: act.ActivityName,
 			ActivityType: act.ActivityType,
-			Starttime:    act.Starttime,
+			StartTimeLocal: act.StartTimeLocal,
 			Distance:     act.Distance,
 			Duration:     act.Duration,
 		})
@@ -69,13 +69,13 @@ func (c *Client) GetActivities(opts activities.ActivityOptions) ([]Activity, err
 }
 
 // GetActivity retrieves details for a specific activity ID
-func (c *Client) GetActivity(activityID int) (*activities.ActivityDetail, error) {
+func (c *Client) GetActivity(activityID int) (*ActivityDetail, error) {
 	// TODO: Implement internalClient.Client.GetActivity
 	return nil, fmt.Errorf("not implemented")
 }
 
 // DownloadActivity downloads activity data
-func (c *Client) DownloadActivity(activityID int, opts activities.DownloadOptions) error {
+func (c *Client) DownloadActivity(activityID int, opts DownloadOptions) error {
 	// TODO: Determine file extension based on format
 	fileExtension := opts.Format
 	if fileExtension == "csv" {
@@ -133,45 +133,53 @@ func (c *Client) SearchActivities(query string) ([]Activity, error) {
 }
 
 // GetSleepData retrieves sleep data for a specified date range
-func (c *Client) GetSleepData(startDate, endDate time.Time) ([]health.SleepData, error) {
-	// TODO: Implement internalClient.Client.GetSleepData
-	return nil, fmt.Errorf("not implemented")
+func (c *Client) GetSleepData(startDate, endDate time.Time) ([]types.SleepData, error) {
+	return c.Client.GetSleepData(startDate, endDate)
 }
 
 // GetHrvData retrieves HRV data for a specified number of days
-func (c *Client) GetHrvData(days int) ([]health.HrvData, error) {
-	// TODO: Implement internalClient.Client.GetHrvData
-	return nil, fmt.Errorf("not implemented")
+func (c *Client) GetHrvData(days int) ([]types.HrvData, error) {
+	return c.Client.GetHrvData(days)
 }
 
 // GetStressData retrieves stress data
-func (c *Client) GetStressData(startDate, endDate time.Time) ([]health.StressData, error) {
-	// TODO: Implement internalClient.Client.GetStressData
-	return nil, fmt.Errorf("not implemented")
+func (c *Client) GetStressData(startDate, endDate time.Time) ([]types.StressData, error) {
+	return c.Client.GetStressData(startDate, endDate)
 }
 
 // GetBodyBatteryData retrieves Body Battery data
-func (c *Client) GetBodyBatteryData(startDate, endDate time.Time) ([]health.BodyBatteryData, error) {
-	// TODO: Implement internalClient.Client.GetBodyBatteryData
-	return nil, fmt.Errorf("not implemented")
+func (c *Client) GetBodyBatteryData(startDate, endDate time.Time) ([]types.BodyBatteryData, error) {
+	return c.Client.GetBodyBatteryData(startDate, endDate)
 }
 
 // GetStepsData retrieves steps data for a specified date range
-func (c *Client) GetStepsData(startDate, endDate time.Time) ([]stats.StepsData, error) {
-	// TODO: Implement internalClient.Client.GetStepsData
-	return nil, fmt.Errorf("not implemented")
+func (c *Client) GetStepsData(startDate, endDate time.Time) ([]types.StepsData, error) {
+	return c.Client.GetStepsData(startDate, endDate)
 }
 
 // GetDistanceData retrieves distance data for a specified date range
-func (c *Client) GetDistanceData(startDate, endDate time.Time) ([]stats.DistanceData, error) {
-	// TODO: Implement internalClient.Client.GetDistanceData
-	return nil, fmt.Errorf("not implemented")
+func (c *Client) GetDistanceData(startDate, endDate time.Time) ([]types.DistanceData, error) {
+	return c.Client.GetDistanceData(startDate, endDate)
 }
 
 // GetCaloriesData retrieves calories data for a specified date range
-func (c *Client) GetCaloriesData(startDate, endDate time.Time) ([]stats.CaloriesData, error) {
-	// TODO: Implement internalClient.Client.GetCaloriesData
-	return nil, fmt.Errorf("not implemented")
+func (c *Client) GetCaloriesData(startDate, endDate time.Time) ([]types.CaloriesData, error) {
+	return c.Client.GetCaloriesData(startDate, endDate)
+}
+
+// GetVO2MaxData retrieves VO2 max data for a specified date range
+func (c *Client) GetVO2MaxData(startDate, endDate time.Time) ([]types.VO2MaxData, error) {
+	return c.Client.GetVO2MaxData(startDate, endDate)
+}
+
+// GetHeartRateZones retrieves heart rate zone data
+func (c *Client) GetHeartRateZones() (*types.HeartRateZones, error) {
+	return c.Client.GetHeartRateZones()
+}
+
+// GetWellnessData retrieves comprehensive wellness data for a specified date range
+func (c *Client) GetWellnessData(startDate, endDate time.Time) ([]types.WellnessData, error) {
+	return c.Client.GetWellnessData(startDate, endDate)
 }
 
 // OAuth1Token returns the OAuth1 token

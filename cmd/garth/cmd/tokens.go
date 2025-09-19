@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"log"
 
-	"garmin-connect/internal/auth/credentials"
-	"garmin-connect/pkg/garmin"
+	"go-garth/internal/auth/credentials"
+	"go-garth/pkg/garmin"
 
 	"github.com/spf13/cobra"
 )

@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"garmin-connect/internal/api/client"
+	"go-garth/internal/api/client"
 )
 
 // DailyBodyBatteryStress represents complete daily Body Battery and stress data

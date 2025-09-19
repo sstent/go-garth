@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"garmin-connect/internal/types"
-	"garmin-connect/internal/utils"
+	"go-garth/internal/types"
+	"go-garth/internal/utils"
 )
 
 // GetOAuth1Token retrieves an OAuth1 token using the provided ticket

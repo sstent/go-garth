@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"garmin-connect/internal/api/client"
-	"garmin-connect/internal/data"
-	"garmin-connect/internal/stats"
+	"go-garth/internal/api/client"
+	"go-garth/internal/data"
+	"go-garth/internal/stats"
 )
 
 func TestBodyBatteryIntegration(t *testing.T) {

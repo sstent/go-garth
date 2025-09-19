@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"garmin-connect/internal/errors"
-	"garmin-connect/internal/auth/sso"
-	"garmin-connect/internal/types"
+	"go-garth/internal/errors"
+	"go-garth/internal/auth/sso"
+	"go-garth/internal/types"
 )
 
 // Client represents the Garmin Connect API client
@@ -423,6 +423,244 @@ func (c *Client) GetActivities(limit int) ([]types.Activity, error) {
 	return activities, nil
 }
 
+func (c *Client) GetSleepData(startDate, endDate time.Time) ([]types.SleepData, error) {
+	// TODO: Implement GetSleepData
+	return nil, fmt.Errorf("GetSleepData not implemented")
+}
+
+// GetHrvData retrieves HRV data for a specified number of days
+func (c *Client) GetHrvData(days int) ([]types.HrvData, error) {
+	// TODO: Implement GetHrvData
+	return nil, fmt.Errorf("GetHrvData not implemented")
+}
+
+// GetStressData retrieves stress data
+func (c *Client) GetStressData(startDate, endDate time.Time) ([]types.StressData, error) {
+	// TODO: Implement GetStressData
+	return nil, fmt.Errorf("GetStressData not implemented")
+}
+
+// GetBodyBatteryData retrieves Body Battery data
+func (c *Client) GetBodyBatteryData(startDate, endDate time.Time) ([]types.BodyBatteryData, error) {
+	// TODO: Implement GetBodyBatteryData
+	return nil, fmt.Errorf("GetBodyBatteryData not implemented")
+}
+
+// GetStepsData retrieves steps data for a specified date range
+func (c *Client) GetStepsData(startDate, endDate time.Time) ([]types.StepsData, error) {
+	// TODO: Implement GetStepsData
+	return nil, fmt.Errorf("GetStepsData not implemented")
+}
+
+// GetDistanceData retrieves distance data for a specified date range
+func (c *Client) GetDistanceData(startDate, endDate time.Time) ([]types.DistanceData, error) {
+	// TODO: Implement GetDistanceData
+	return nil, fmt.Errorf("GetDistanceData not implemented")
+}
+
+// GetCaloriesData retrieves calories data for a specified date range
+func (c *Client) GetCaloriesData(startDate, endDate time.Time) ([]types.CaloriesData, error) {
+	// TODO: Implement GetCaloriesData
+	return nil, fmt.Errorf("GetCaloriesData not implemented")
+}
+
+
+func (c *Client) GetVO2MaxData(startDate, endDate time.Time) ([]types.VO2MaxData, error) {
+	scheme := "https"
+	if strings.HasPrefix(c.Domain, "127.0.0.1") {
+		scheme = "http"
+	}
+
+	params := url.Values{}
+	params.Add("startDate", startDate.Format("2006-01-02"))
+	params.Add("endDate", endDate.Format("2006-01-02"))
+
+	vo2MaxURL := fmt.Sprintf("%s://connectapi.%s/wellness-service/wellness/daily/vo2max?%s", scheme, c.Domain, params.Encode())
+
+	req, err := http.NewRequest("GET", vo2MaxURL, nil)
+	if err != nil {
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to create VO2 max request",
+					Cause:   err,
+				},
+			},
+		}
+	}
+
+	req.Header.Set("Authorization", c.AuthToken)
+	req.Header.Set("User-Agent", "com.garmin.android.apps.connectmobile")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to get VO2 max data",
+					Cause:   err,
+				},
+			},
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				StatusCode: resp.StatusCode,
+				Response:   string(body),
+				GarthError: errors.GarthError{
+					Message: "VO2 max request failed",
+				},
+			},
+		}
+	}
+
+	var vo2MaxData []types.VO2MaxData
+	if err := json.NewDecoder(resp.Body).Decode(&vo2MaxData); err != nil {
+		return nil, &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to parse VO2 max data",
+				Cause:   err,
+			},
+		}
+	}
+
+	return vo2MaxData, nil
+}
+
+// GetHeartRateZones retrieves heart rate zone data
+func (c *Client) GetHeartRateZones() (*types.HeartRateZones, error) {
+	scheme := "https"
+	if strings.HasPrefix(c.Domain, "127.0.0.1") {
+		scheme = "http"
+	}
+
+	hrzURL := fmt.Sprintf("%s://connectapi.%s/userprofile-service/userprofile/heartRateZones", scheme, c.Domain)
+
+	req, err := http.NewRequest("GET", hrzURL, nil)
+	if err != nil {
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to create HR zones request",
+					Cause:   err,
+				},
+			},
+		}
+	}
+
+	req.Header.Set("Authorization", c.AuthToken)
+	req.Header.Set("User-Agent", "com.garmin.android.apps.connectmobile")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to get HR zones data",
+					Cause:   err,
+				},
+			},
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				StatusCode: resp.StatusCode,
+				Response:   string(body),
+				GarthError: errors.GarthError{
+					Message: "HR zones request failed",
+				},
+			},
+		}
+	}
+
+	var hrZones types.HeartRateZones
+	if err := json.NewDecoder(resp.Body).Decode(&hrZones); err != nil {
+		return nil, &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to parse HR zones data",
+				Cause:   err,
+			},
+		}
+	}
+
+	return &hrZones, nil
+}
+
+// GetWellnessData retrieves comprehensive wellness data for a specified date range
+func (c *Client) GetWellnessData(startDate, endDate time.Time) ([]types.WellnessData, error) {
+	scheme := "https"
+	if strings.HasPrefix(c.Domain, "127.0.0.1") {
+		scheme = "http"
+	}
+
+	params := url.Values{}
+	params.Add("startDate", startDate.Format("2006-01-02"))
+	params.Add("endDate", endDate.Format("2006-01-02"))
+
+	wellnessURL := fmt.Sprintf("%s://connectapi.%s/wellness-service/wellness/daily/wellness?%s", scheme, c.Domain, params.Encode())
+
+	req, err := http.NewRequest("GET", wellnessURL, nil)
+	if err != nil {
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to create wellness data request",
+					Cause:   err,
+				},
+			},
+		}
+	}
+
+	req.Header.Set("Authorization", c.AuthToken)
+	req.Header.Set("User-Agent", "com.garmin.android.apps.connectmobile")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to get wellness data",
+					Cause:   err,
+				},
+			},
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				StatusCode: resp.StatusCode,
+				Response:   string(body),
+				GarthError: errors.GarthError{
+					Message: "Wellness data request failed",
+				},
+			},
+		}
+	}
+
+	var wellnessData []types.WellnessData
+	if err := json.NewDecoder(resp.Body).Decode(&wellnessData); err != nil {
+		return nil, &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to parse wellness data",
+				Cause:   err,
+			},
+		}
+	}
+
+	return wellnessData, nil
+}
+
 // SaveSession saves the current session to a file
 func (c *Client) SaveSession(filename string) error {
 	session := types.SessionData{
@@ -480,4 +718,10 @@ func (c *Client) LoadSession(filename string) error {
 	c.AuthToken = session.AuthToken
 
 	return nil
+}
+
+// RefreshSession refreshes the authentication tokens
+func (c *Client) RefreshSession() error {
+	// TODO: Implement token refresh logic
+	return fmt.Errorf("RefreshSession not implemented")
 }

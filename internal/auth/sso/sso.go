@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"garmin-connect/internal/auth/oauth"
-	"garmin-connect/internal/types"
+	"go-garth/internal/auth/oauth"
+	"go-garth/internal/types"
 )
 
 var (

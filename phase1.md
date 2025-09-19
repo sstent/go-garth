@@ -370,17 +370,17 @@ type VO2MaxReading struct {
 ```
 
 **Tasks:**
-- [ ] Research VO2 max API endpoints
-- [ ] Implement data fetching
-- [ ] Add historical data support
-- [ ] Create CLI command
-- [ ] Add data validation
-- [ ] Format output appropriately
+- [x] Research VO2 max API endpoints
+- [x] Implement data fetching
+- [x] Add historical data support
+- [x] Create CLI command
+- [x] Add data validation
+- [x] Format output appropriately
 
 **Deliverables:**
-- [ ] `garth health vo2max` command working
-- [ ] Historical data support
-- [ ] Both running and cycling metrics
+- [x] `garth health vo2max` command working
+- [x] Historical data support
+- [x] Both running and cycling metrics
 
 #### 1D.2: Heart Rate Zones
 **Duration: 1 day**
@@ -403,15 +403,15 @@ type HRZone struct {
 ```
 
 **Tasks:**
-- [ ] Implement HR zones API calls
-- [ ] Add zone calculation logic
-- [ ] Create CLI command
-- [ ] Add zone analysis features
-- [ ] Implement zone updates (if possible)
+- [x] Implement HR zones API calls
+- [x] Add zone calculation logic
+- [x] Create CLI command
+- [x] Add zone analysis features
+- [x] Implement zone updates (if possible)
 
 **Deliverables:**
-- [ ] `garth health hr-zones` command
-- [ ] Zone calculation and display
+- [x] `garth health hr-zones` command
+- [x] Zone calculation and display
 - [ ] Integration with other health metrics
 
 #### 1D.3: Additional Health Metrics

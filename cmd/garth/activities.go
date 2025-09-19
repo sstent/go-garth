@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
+	"github.com/olekukonko/tablewriter"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"garmin-connect/pkg/garmin"
+	"go-garth/pkg/garmin"
 )
 
 var (
@@ -43,7 +43,7 @@ var (
 	downloadActivitiesCmd = &cobra.Command{
 		Use:   "download [activityID]",
 		Short: "Download activity data",
-		        Args:  cobra.RangeArgs(0, 1),		RunE:  runDownloadActivity,
+		Args:  cobra.RangeArgs(0, 1), RunE: runDownloadActivity,
 	}
 
 	searchActivitiesCmd = &cobra.Command{
@@ -54,15 +54,15 @@ var (
 	}
 
 	// Flags for listActivitiesCmd
-	activityLimit      int
-	activityOffset     int
-	activityType       string
-	activityDateFrom   string
-	activityDateTo     string
+	activityLimit    int
+	activityOffset   int
+	activityType     string
+	activityDateFrom string
+	activityDateTo   string
 
 	// Flags for downloadActivitiesCmd
-	downloadFormat string
-	outputDir      string
+	downloadFormat   string
+	outputDir        string
 	downloadOriginal bool
 	downloadAll      bool
 )
@@ -105,8 +105,8 @@ func runListActivities(cmd *cobra.Command, args []string) error {
 	}
 
 	opts := garmin.ActivityOptions{
-		Limit: activityLimit,
-		Offset: activityOffset,
+		Limit:        activityLimit,
+		Offset:       activityOffset,
 		ActivityType: activityType,
 	}
 
@@ -152,21 +152,21 @@ func runListActivities(cmd *cobra.Command, args []string) error {
 			writer.Write([]string{
 				fmt.Sprintf("%d", activity.ActivityID),
 				activity.ActivityName,
-				activity.ActivityType,
-				activity.Starttime.Format("2006-01-02 15:04:05"),
+				activity.ActivityType.TypeKey,
+				activity.StartTimeLocal.Format("2006-01-02 15:04:05"),
 				fmt.Sprintf("%.2f", activity.Distance/1000),
 				fmt.Sprintf("%.0f", activity.Duration),
 			})
 		}
 	case "table":
 		table := tablewriter.NewWriter(os.Stdout)
-		table.SetHeader([]string{"ID", "Name", "Type", "Date", "Distance (km)", "Duration (s)"})
+		table.Header([]string{"ID", "Name", "Type", "Date", "Distance (km)", "Duration (s)"})
 		for _, activity := range activities {
 			table.Append([]string{
 				fmt.Sprintf("%d", activity.ActivityID),
 				activity.ActivityName,
-				activity.ActivityType,
-				activity.Starttime.Format("2006-01-02 15:04:05"),
+				activity.ActivityType.TypeKey,
+				activity.StartTimeLocal.Format("2006-01-02 15:04:05"),
 				fmt.Sprintf("%.2f", activity.Distance/1000),
 				fmt.Sprintf("%.0f", activity.Duration),
 			})
@@ -204,7 +204,7 @@ func runGetActivity(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Activity Details (ID: %d):\n", activityDetail.ActivityID)
 	fmt.Printf("  Name: %s\n", activityDetail.ActivityName)
 	fmt.Printf("  Type: %s\n", activityDetail.ActivityType)
-	fmt.Printf("  Date: %s\n", activityDetail.Starttime.Format("2006-01-02 15:04:05"))
+	fmt.Printf("  Date: %s\n", activityDetail.StartTimeLocal.Format("2006-01-02 15:04:05"))
 	fmt.Printf("  Distance: %.2f km\n", activityDetail.Distance/1000)
 	fmt.Printf("  Duration: %.0f s\n", activityDetail.Duration)
 	fmt.Printf("  Description: %s\n", activityDetail.Description)
@@ -213,6 +213,10 @@ func runGetActivity(cmd *cobra.Command, args []string) error {
 }
 
 func runDownloadActivity(cmd *cobra.Command, args []string) error {
+	var wg sync.WaitGroup
+	const concurrencyLimit = 5 // Limit concurrent downloads
+	sem := make(chan struct{}, concurrencyLimit)
+
 	garminClient, err := garmin.NewClient("www.garmin.com") // TODO: Domain should be configurable
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
@@ -292,7 +296,7 @@ func runDownloadActivity(cmd *cobra.Command, args []string) error {
 			defer func() { <-sem }()
 
 			if downloadFormat == "csv" {
-				activityDetail, err := garminClient.GetActivity(activity.ActivityID)
+				activityDetail, err := garminClient.GetActivity(int(activity.ActivityID))
 				if err != nil {
 					fmt.Printf("Warning: Failed to get activity details for CSV export for activity %d: %v\n", activity.ActivityID, err)
 					bar.Add(1)
@@ -323,8 +327,8 @@ func runDownloadActivity(cmd *cobra.Command, args []string) error {
 				writer.Write([]string{
 					fmt.Sprintf("%d", activityDetail.ActivityID),
 					activityDetail.ActivityName,
-					activityDetail.ActivityType,
-					activityDetail.Starttime.Format("2006-01-02 15:04:05"),
+					activityDetail.ActivityType.TypeKey,
+					activityDetail.StartTimeLocal.Format("2006-01-02 15:04:05"),
 					fmt.Sprintf("%.2f", activityDetail.Distance/1000),
 					fmt.Sprintf("%.0f", activityDetail.Duration),
 					activityDetail.Description,
@@ -332,35 +336,39 @@ func runDownloadActivity(cmd *cobra.Command, args []string) error {
 
 				fmt.Printf("Activity %d summary exported to %s\n", activity.ActivityID, outputPath)
 			} else {
+				filename := fmt.Sprintf("%d.%s", activity.ActivityID, downloadFormat)
+				if downloadOriginal {
+					filename = fmt.Sprintf("%d_original.fit", activity.ActivityID) // Assuming original is .fit
+				}
+				outputPath := filepath.Join(outputDir, filename)
+
+				// Check if file already exists
+				if _, err := os.Stat(outputPath); err == nil {
+					fmt.Printf("Skipping activity %d: file already exists at %s\n", activity.ActivityID, outputPath)
+					bar.Add(1)
+					return
+				} else if !os.IsNotExist(err) {
+					fmt.Printf("Warning: Failed to check existence of file %s for activity %d: %v\n", outputPath, activity.ActivityID, err)
+					bar.Add(1)
+					return
+				}
+
 				opts := garmin.DownloadOptions{
 					Format:    downloadFormat,
 					OutputDir: outputDir,
 					Original:  downloadOriginal,
+					Filename:  filename, // Pass filename to opts
 				}
 
-				                    outputPath = filepath.Join(outputDir, filename)
-				                }
-				
-				                // Check if file already exists
-				                if _, err := os.Stat(outputPath); err == nil {
-				                    fmt.Printf("Skipping activity %d: file already exists at %s\n", activity.ActivityID, outputPath)
-				                    bar.Add(1)
-				                    return
-				                } else if !os.IsNotExist(err) {
-				                    fmt.Printf("Warning: Failed to check existence of file %s for activity %d: %v\n", outputPath, activity.ActivityID, err)
-				                    bar.Add(1)
-				                    return
-				                }
-				
-				                fmt.Printf("Downloading activity %d in %s format to %s...\n", activity.ActivityID, downloadFormat, outputDir)
-				                if err := garminClient.DownloadActivity(activity.ActivityID, opts); err != nil {
-				                    fmt.Printf("Warning: Failed to download activity %d: %v\n", activity.ActivityID, err)
-				                    bar.Add(1)
-				                    return
-				                }
-				
-				                fmt.Printf("Activity %d downloaded successfully.\n", activity.ActivityID)			}
+				fmt.Printf("Downloading activity %d in %s format to %s...\n", activity.ActivityID, downloadFormat, outputPath)
+				if err := garminClient.DownloadActivity(int(activity.ActivityID), opts); err != nil {
+					fmt.Printf("Warning: Failed to download activity %d: %v\n", activity.ActivityID, err)
+					bar.Add(1)
+					return
+				}
 
+				fmt.Printf("Activity %d downloaded successfully.\n", activity.ActivityID)
+			}
 			bar.Add(1)
 		}(activity)
 	}
@@ -401,8 +409,8 @@ func runSearchActivities(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Activities matching '%s':\n", query)
 	for _, activity := range activities {
 		fmt.Printf("- ID: %d, Name: %s, Type: %s, Date: %s\n",
-			activity.ActivityID, activity.ActivityName, activity.ActivityType,
-			activity.Starttime.Format("2006-01-02"))
+			activity.ActivityID, activity.ActivityName, activity.ActivityType.TypeKey,
+			activity.StartTimeLocal.Format("2006-01-02"))
 	}
 
 	return nil

@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/url"
 
-	"garmin-connect/internal/api/client"
+	"go-garth/internal/api/client"
 )
 
 // MockClient simulates API client for tests

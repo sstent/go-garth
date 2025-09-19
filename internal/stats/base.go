@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"garmin-connect/internal/api/client"
-	"garmin-connect/internal/utils"
+	"go-garth/internal/api/client"
+	"go-garth/internal/utils"
 )
 
 type Stats interface {

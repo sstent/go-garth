@@ -2,9 +2,9 @@ package garmin_test
 
 import (
 	"encoding/json"
-	"garmin-connect/internal/api/client"
-	"garmin-connect/internal/data"
-	"garmin-connect/internal/testutils"
+	"go-garth/internal/api/client"
+	"go-garth/internal/data"
+	"go-garth/internal/testutils"
 	"testing"
 	"time"
 )

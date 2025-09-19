@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"garmin-connect/internal/auth/credentials"
-	"garmin-connect/pkg/garmin"
+	"go-garth/internal/auth/credentials"
+	"go-garth/pkg/garmin"
 
 	"github.com/spf13/cobra"
 )
@@ -58,13 +58,13 @@ var dataCmd = &cobra.Command{
 
 		switch dataType {
 		case "bodybattery":
-			result, err = garminClient.GetBodyBattery(endDate)
+			result, err = garminClient.GetBodyBatteryData(endDate, endDate)
 		case "sleep":
-			result, err = garminClient.GetSleep(endDate)
+			result, err = garminClient.GetSleepData(endDate, endDate)
 		case "hrv":
-			result, err = garminClient.GetHRV(endDate)
-		case "weight":
-			result, err = garminClient.GetWeight(endDate)
+			result, err = garminClient.GetHrvData(dataDays)
+		// case "weight":
+		// 	result, err = garminClient.GetWeight(endDate)
 		default:
 			log.Fatalf("Unknown data type: %s", dataType)
 		}

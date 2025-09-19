@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"garmin-connect/internal/testutils"
+	"go-garth/internal/testutils"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"garmin-connect/internal/api/client"
+	"go-garth/internal/api/client"
 )
 
 func TestClient_GetUserProfile(t *testing.T) {
