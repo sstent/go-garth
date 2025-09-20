@@ -6,7 +6,6 @@ import (
 	"crypto/sha1"
 	"encoding/base64"
 	"encoding/json"
-	"go-garth/internal/types"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -16,10 +15,16 @@ import (
 	"time"
 )
 
-var oauthConsumer *types.OAuthConsumer
+// OAuthConsumer represents OAuth consumer credentials
+type OAuthConsumer struct {
+	ConsumerKey    string `json:"consumer_key"`
+	ConsumerSecret string `json:"consumer_secret"`
+}
+
+var oauthConsumer *OAuthConsumer
 
 // LoadOAuthConsumer loads OAuth consumer credentials
-func LoadOAuthConsumer() (*types.OAuthConsumer, error) {
+func LoadOAuthConsumer() (*OAuthConsumer, error) {
 	if oauthConsumer != nil {
 		return oauthConsumer, nil
 	}
@@ -29,7 +34,7 @@ func LoadOAuthConsumer() (*types.OAuthConsumer, error) {
 	if err == nil {
 		defer resp.Body.Close()
 		if resp.StatusCode == 200 {
-			var consumer types.OAuthConsumer
+			var consumer OAuthConsumer
 			if err := json.NewDecoder(resp.Body).Decode(&consumer); err == nil {
 				oauthConsumer = &consumer
 				return oauthConsumer, nil
@@ -38,7 +43,7 @@ func LoadOAuthConsumer() (*types.OAuthConsumer, error) {
 	}
 
 	// Fallback to hardcoded values
-	oauthConsumer = &types.OAuthConsumer{
+	oauthConsumer = &OAuthConsumer{
 		ConsumerKey:    "fc320c35-fbdc-4308-b5c6-8e41a8b2e0c8",
 		ConsumerSecret: "8b344b8c-5bd5-4b7b-9c98-ad76a6bbf0e7",
 	}

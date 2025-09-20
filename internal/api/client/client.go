@@ -14,9 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"go-garth/internal/errors"
 	"go-garth/internal/auth/sso"
-	"go-garth/internal/types"
+	"go-garth/internal/errors"
+	types "go-garth/internal/models/types"
+	shared "go-garth/shared/interfaces"
 )
 
 // Client represents the Garmin Connect API client
@@ -27,6 +28,80 @@ type Client struct {
 	AuthToken   string
 	OAuth1Token *types.OAuth1Token
 	OAuth2Token *types.OAuth2Token
+}
+
+// Verify that Client implements shared.APIClient
+var _ shared.APIClient = (*Client)(nil)
+
+// GetUsername returns the authenticated username
+func (c *Client) GetUsername() string {
+	return c.Username
+}
+
+// GetUserSettings retrieves the current user's settings
+func (c *Client) GetUserSettings() (*types.UserSettings, error) {
+	scheme := "https"
+	if strings.HasPrefix(c.Domain, "127.0.0.1") {
+		scheme = "http"
+	}
+	host := c.Domain
+	if !strings.HasPrefix(c.Domain, "127.0.0.1") {
+		host = "connectapi." + c.Domain
+	}
+	settingsURL := fmt.Sprintf("%s://%s/userprofile-service/userprofile/user-settings", scheme, host)
+
+	req, err := http.NewRequest("GET", settingsURL, nil)
+	if err != nil {
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to create user settings request",
+					Cause:   err,
+				},
+			},
+		}
+	}
+
+	req.Header.Set("Authorization", c.AuthToken)
+	req.Header.Set("User-Agent", "com.garmin.android.apps.connectmobile")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to get user settings",
+					Cause:   err,
+				},
+			},
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				StatusCode: resp.StatusCode,
+				Response:   string(body),
+				GarthError: errors.GarthError{
+					Message: "User settings request failed",
+				},
+			},
+		}
+	}
+
+	var settings types.UserSettings
+	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
+		return nil, &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to parse user settings",
+				Cause:   err,
+			},
+		}
+	}
+
+	return &settings, nil
 }
 
 // NewClient creates a new Garmin Connect client
@@ -145,7 +220,11 @@ func (c *Client) GetUserProfile() (*types.UserProfile, error) {
 	if strings.HasPrefix(c.Domain, "127.0.0.1") {
 		scheme = "http"
 	}
-	profileURL := fmt.Sprintf("%s://connectapi.%s/userprofile-service/socialProfile", scheme, c.Domain)
+	host := c.Domain
+	if !strings.HasPrefix(c.Domain, "127.0.0.1") {
+		host = "connectapi." + c.Domain
+	}
+	profileURL := fmt.Sprintf("%s://%s/userprofile-service/socialProfile", scheme, host)
 
 	req, err := http.NewRequest("GET", profileURL, nil)
 	if err != nil {
@@ -464,71 +543,71 @@ func (c *Client) GetCaloriesData(startDate, endDate time.Time) ([]types.Calories
 	return nil, fmt.Errorf("GetCaloriesData not implemented")
 }
 
-
+// GetVO2MaxData retrieves VO2 max data using the modern approach via user settings
 func (c *Client) GetVO2MaxData(startDate, endDate time.Time) ([]types.VO2MaxData, error) {
-	scheme := "https"
-	if strings.HasPrefix(c.Domain, "127.0.0.1") {
-		scheme = "http"
-	}
-
-	params := url.Values{}
-	params.Add("startDate", startDate.Format("2006-01-02"))
-	params.Add("endDate", endDate.Format("2006-01-02"))
-
-	vo2MaxURL := fmt.Sprintf("%s://connectapi.%s/wellness-service/wellness/daily/vo2max?%s", scheme, c.Domain, params.Encode())
-
-	req, err := http.NewRequest("GET", vo2MaxURL, nil)
+	// Get user settings which contains current VO2 max values
+	settings, err := c.GetUserSettings()
 	if err != nil {
-		return nil, &errors.APIError{
-			GarthHTTPError: errors.GarthHTTPError{
-				GarthError: errors.GarthError{
-					Message: "Failed to create VO2 max request",
-					Cause:   err,
-				},
-			},
-		}
+		return nil, fmt.Errorf("failed to get user settings: %w", err)
 	}
 
-	req.Header.Set("Authorization", c.AuthToken)
-	req.Header.Set("User-Agent", "com.garmin.android.apps.connectmobile")
+	// Create VO2MaxData for the date range
+	var results []types.VO2MaxData
+	current := startDate
+	for !current.After(endDate) {
+		vo2Data := types.VO2MaxData{
+			Date:          current,
+			UserProfilePK: settings.ID,
+		}
 
-	resp, err := c.HTTPClient.Do(req)
+		// Set VO2 max values if available
+		if settings.UserData.VO2MaxRunning != nil {
+			vo2Data.VO2MaxRunning = settings.UserData.VO2MaxRunning
+		}
+		if settings.UserData.VO2MaxCycling != nil {
+			vo2Data.VO2MaxCycling = settings.UserData.VO2MaxCycling
+		}
+
+		results = append(results, vo2Data)
+		current = current.AddDate(0, 0, 1)
+	}
+
+	return results, nil
+}
+
+// GetCurrentVO2Max retrieves the current VO2 max values from user profile
+func (c *Client) GetCurrentVO2Max() (*types.VO2MaxProfile, error) {
+	settings, err := c.GetUserSettings()
 	if err != nil {
-		return nil, &errors.APIError{
-			GarthHTTPError: errors.GarthHTTPError{
-				GarthError: errors.GarthError{
-					Message: "Failed to get VO2 max data",
-					Cause:   err,
-				},
-			},
-		}
+		return nil, fmt.Errorf("failed to get user settings: %w", err)
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, &errors.APIError{
-			GarthHTTPError: errors.GarthHTTPError{
-				StatusCode: resp.StatusCode,
-				Response:   string(body),
-				GarthError: errors.GarthError{
-					Message: "VO2 max request failed",
-				},
-			},
+	profile := &types.VO2MaxProfile{
+		UserProfilePK: settings.ID,
+		LastUpdated:   time.Now(),
+	}
+
+	// Add running VO2 max if available
+	if settings.UserData.VO2MaxRunning != nil && *settings.UserData.VO2MaxRunning > 0 {
+		profile.Running = &types.VO2MaxEntry{
+			Value:        *settings.UserData.VO2MaxRunning,
+			ActivityType: "running",
+			Date:         time.Now(),
+			Source:       "user_settings",
 		}
 	}
 
-	var vo2MaxData []types.VO2MaxData
-	if err := json.NewDecoder(resp.Body).Decode(&vo2MaxData); err != nil {
-		return nil, &errors.IOError{
-			GarthError: errors.GarthError{
-				Message: "Failed to parse VO2 max data",
-				Cause:   err,
-			},
+	// Add cycling VO2 max if available
+	if settings.UserData.VO2MaxCycling != nil && *settings.UserData.VO2MaxCycling > 0 {
+		profile.Cycling = &types.VO2MaxEntry{
+			Value:        *settings.UserData.VO2MaxCycling,
+			ActivityType: "cycling",
+			Date:         time.Now(),
+			Source:       "user_settings",
 		}
 	}
 
-	return vo2MaxData, nil
+	return profile, nil
 }
 
 // GetHeartRateZones retrieves heart rate zone data
@@ -689,6 +768,163 @@ func (c *Client) SaveSession(filename string) error {
 	}
 
 	return nil
+}
+
+// GetDetailedSleepData retrieves comprehensive sleep data for a date
+func (c *Client) GetDetailedSleepData(date time.Time) (*types.DetailedSleepData, error) {
+	dateStr := date.Format("2006-01-02")
+	path := fmt.Sprintf("/wellness-service/wellness/dailySleepData/%s?date=%s&nonSleepBufferMinutes=60",
+		c.Username, dateStr)
+
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get detailed sleep data: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var response struct {
+		DailySleepDTO            *types.DetailedSleepData `json:"dailySleepDTO"`
+		SleepMovement            []types.SleepMovement    `json:"sleepMovement"`
+		RemSleepData            bool               `json:"remSleepData"`
+		SleepLevels             []types.SleepLevel       `json:"sleepLevels"`
+		SleepRestlessMoments    []interface{}      `json:"sleepRestlessMoments"`
+		RestlessMomentsCount    int                `json:"restlessMomentsCount"`
+		WellnessSpO2SleepSummaryDTO interface{}   `json:"wellnessSpO2SleepSummaryDTO"`
+		WellnessEpochSPO2DataDTOList []interface{} `json:"wellnessEpochSPO2DataDTOList"`
+		WellnessEpochRespirationDataDTOList []interface{} `json:"wellnessEpochRespirationDataDTOList"`
+		SleepStress             interface{}        `json:"sleepStress"`
+	}
+
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse detailed sleep response: %w", err)
+	}
+
+	if response.DailySleepDTO == nil {
+		return nil, nil
+	}
+
+	// Populate additional data
+	response.DailySleepDTO.SleepMovement = response.SleepMovement
+	response.DailySleepDTO.SleepLevels = response.SleepLevels
+
+	return response.DailySleepDTO, nil
+}
+
+// GetDailyHRVData retrieves comprehensive daily HRV data for a date
+func (c *Client) GetDailyHRVData(date time.Time) (*types.DailyHRVData, error) {
+	dateStr := date.Format("2006-01-02")
+	path := fmt.Sprintf("/wellness-service/wellness/dailyHrvData/%s?date=%s",
+		c.Username, dateStr)
+
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get HRV data: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var response struct {
+		HRVSummary  types.DailyHRVData `json:"hrvSummary"`
+		HRVReadings []types.HRVReading `json:"hrvReadings"`
+	}
+
+	if err := json.Unmarshal(data, &response); err != nil {
+		return nil, fmt.Errorf("failed to parse HRV response: %w", err)
+	}
+
+	// Combine summary and readings
+	response.HRVSummary.HRVReadings = response.HRVReadings
+	return &response.HRVSummary, nil
+}
+
+// GetDetailedBodyBatteryData retrieves comprehensive Body Battery data for a date
+func (c *Client) GetDetailedBodyBatteryData(date time.Time) (*types.DetailedBodyBatteryData, error) {
+	dateStr := date.Format("2006-01-02")
+
+	// Get main Body Battery data
+	path1 := fmt.Sprintf("/wellness-service/wellness/dailyStress/%s", dateStr)
+	data1, err := c.ConnectAPI(path1, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Body Battery stress data: %w", err)
+	}
+
+	// Get Body Battery events
+	path2 := fmt.Sprintf("/wellness-service/wellness/bodyBattery/%s", dateStr)
+	data2, err := c.ConnectAPI(path2, "GET", nil, nil)
+	if err != nil {
+		// Events might not be available, continue without them
+		data2 = []byte("[]")
+	}
+
+	var result types.DetailedBodyBatteryData
+	if len(data1) > 0 {
+		if err := json.Unmarshal(data1, &result); err != nil {
+			return nil, fmt.Errorf("failed to parse Body Battery data: %w", err)
+		}
+	}
+
+	var events []types.BodyBatteryEvent
+	if len(data2) > 0 {
+		if err := json.Unmarshal(data2, &events); err == nil {
+			result.Events = events
+		}
+	}
+
+	return &result, nil
+}
+
+// GetTrainingStatus retrieves current training status
+func (c *Client) GetTrainingStatus(date time.Time) (*types.TrainingStatus, error) {
+	dateStr := date.Format("2006-01-02")
+	path := fmt.Sprintf("/metrics-service/metrics/trainingStatus/%s", dateStr)
+
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get training status: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var result types.TrainingStatus
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse training status: %w", err)
+	}
+
+	return &result, nil
+}
+
+// GetTrainingLoad retrieves training load data
+func (c *Client) GetTrainingLoad(date time.Time) (*types.TrainingLoad, error) {
+	dateStr := date.Format("2006-01-02")
+	endDate := date.AddDate(0, 0, 6).Format("2006-01-02") // Get week of data
+	path := fmt.Sprintf("/metrics-service/metrics/trainingLoad/%s/%s", dateStr, endDate)
+
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get training load: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var results []types.TrainingLoad
+	if err := json.Unmarshal(data, &results); err != nil {
+		return nil, fmt.Errorf("failed to parse training load: %w", err)
+	}
+
+	if len(results) == 0 {
+		return nil, nil
+	}
+
+	return &results[0], nil
 }
 
 // LoadSession loads a session from a file

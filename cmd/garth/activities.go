@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/olekukonko/tablewriter"
+	"github.com/rodaine/table"
 	"github.com/schollz/progressbar/v3"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -159,19 +159,18 @@ func runListActivities(cmd *cobra.Command, args []string) error {
 			})
 		}
 	case "table":
-		table := tablewriter.NewWriter(os.Stdout)
-		table.Header([]string{"ID", "Name", "Type", "Date", "Distance (km)", "Duration (s)"})
+		tbl := table.New("ID", "Name", "Type", "Date", "Distance (km)", "Duration (s)")
 		for _, activity := range activities {
-			table.Append([]string{
+			tbl.AddRow(
 				fmt.Sprintf("%d", activity.ActivityID),
 				activity.ActivityName,
 				activity.ActivityType.TypeKey,
 				activity.StartTimeLocal.Format("2006-01-02 15:04:05"),
 				fmt.Sprintf("%.2f", activity.Distance/1000),
 				fmt.Sprintf("%.0f", activity.Duration),
-			})
+			)
 		}
-		table.Render()
+		tbl.Print()
 	default:
 		return fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
@@ -203,7 +202,7 @@ func runGetActivity(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Activity Details (ID: %d):\n", activityDetail.ActivityID)
 	fmt.Printf("  Name: %s\n", activityDetail.ActivityName)
-	fmt.Printf("  Type: %s\n", activityDetail.ActivityType)
+	fmt.Printf("  Type: %s\n", activityDetail.ActivityType.TypeKey)
 	fmt.Printf("  Date: %s\n", activityDetail.StartTimeLocal.Format("2006-01-02 15:04:05"))
 	fmt.Printf("  Distance: %.2f km\n", activityDetail.Distance/1000)
 	fmt.Printf("  Duration: %.0f s\n", activityDetail.Duration)

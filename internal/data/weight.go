@@ -5,25 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	"go-garth/internal/api/client"
+	shared "go-garth/shared/interfaces"
+	types "go-garth/internal/models/types"
 )
 
-// WeightData represents weight measurement data
-type WeightData struct {
-	UserProfilePK     int       `json:"userProfilePk"`
-	CalendarDate      time.Time `json:"calendarDate"`
-	Timestamp         time.Time `json:"timestamp"`
-	Weight            float64   `json:"weight"` // in kilograms
-	BMI               float64   `json:"bmi"`
-	BodyFatPercentage float64   `json:"bodyFatPercentage"`
-	BoneMass          float64   `json:"boneMass"`   // in kg
-	MuscleMass        float64   `json:"muscleMass"` // in kg
-	Hydration         float64   `json:"hydration"`  // in kg
-	BaseData
-}
-
 // Validate checks if weight data contains valid values
-func (w *WeightData) Validate() error {
+func (w *types.WeightData) Validate() error {
 	if w.Weight <= 0 {
 		return fmt.Errorf("invalid weight value")
 	}
@@ -34,13 +21,13 @@ func (w *WeightData) Validate() error {
 }
 
 // Get implements the Data interface for WeightData
-func (w *WeightData) Get(day time.Time, client *client.Client) (any, error) {
+func (w *types.WeightData) Get(day time.Time, c shared.APIClient) (any, error) {
 	startDate := day.Format("2006-01-02")
 	endDate := day.Format("2006-01-02")
 	path := fmt.Sprintf("/weight-service/weight/dateRange?startDate=%s&endDate=%s",
 		startDate, endDate)
 
-	data, err := client.ConnectAPI(path, "GET", nil, nil)
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +37,7 @@ func (w *WeightData) Get(day time.Time, client *client.Client) (any, error) {
 	}
 
 	var response struct {
-		WeightList []WeightData `json:"weightList"`
+		WeightList []types.WeightData `json:"weightList"`
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, err
@@ -71,8 +58,8 @@ func (w *WeightData) Get(day time.Time, client *client.Client) (any, error) {
 }
 
 // List implements the Data interface for concurrent fetching
-func (w *WeightData) List(end time.Time, days int, client *client.Client, maxWorkers int) ([]any, error) {
-	results, errs := w.BaseData.List(end, days, client, maxWorkers)
+func (w *types.WeightData) List(end time.Time, days int, c shared.APIClient, maxWorkers int) ([]any, error) {
+	results, errs := w.BaseData.List(end, days, c, maxWorkers)
 	if len(errs) > 0 {
 		// Return first error for now
 		return results, errs[0]

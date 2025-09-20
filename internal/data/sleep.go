@@ -5,27 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"go-garth/internal/api/client"
+	shared "go-garth/shared/interfaces"
+	types "go-garth/internal/models/types"
 )
-
-// SleepScores represents sleep scoring data
-type SleepScores struct {
-	TotalSleepSeconds int `json:"totalSleepSeconds"`
-	SleepScores       []struct {
-		StartTimeGMT time.Time `json:"startTimeGmt"`
-		EndTimeGMT   time.Time `json:"endTimeGmt"`
-		SleepScore   int       `json:"sleepScore"`
-	} `json:"sleepScores"`
-	SleepMovement []SleepMovement `json:"sleepMovement"`
-	// Add other fields from Python implementation
-}
-
-// SleepMovement represents movement during sleep
-type SleepMovement struct {
-	StartGMT      time.Time `json:"startGmt"`
-	EndGMT        time.Time `json:"endGmt"`
-	ActivityLevel int       `json:"activityLevel"`
-}
 
 // DailySleepDTO represents daily sleep data
 type DailySleepDTO struct {
@@ -33,17 +15,17 @@ type DailySleepDTO struct {
 	CalendarDate           time.Time   `json:"calendarDate"`
 	SleepStartTimestampGMT time.Time   `json:"sleepStartTimestampGmt"`
 	SleepEndTimestampGMT   time.Time   `json:"sleepEndTimestampGmt"`
-	SleepScores            SleepScores `json:"sleepScores"`
-	BaseData
+	SleepScores            types.SleepScore `json:"sleepScores"` // Using types.SleepScore
+	shared.BaseData
 }
 
 // Get implements the Data interface for DailySleepDTO
-func (d *DailySleepDTO) Get(day time.Time, client *client.Client) (any, error) {
+func (d *DailySleepDTO) Get(day time.Time, c shared.APIClient) (any, error) {
 	dateStr := day.Format("2006-01-02")
 	path := fmt.Sprintf("/wellness-service/wellness/dailySleepData/%s?nonSleepBufferMinutes=60&date=%s",
-		client.Username, dateStr)
+		c.GetUsername(), dateStr)
 
-	data, err := client.ConnectAPI(path, "GET", nil, nil)
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -54,7 +36,7 @@ func (d *DailySleepDTO) Get(day time.Time, client *client.Client) (any, error) {
 
 	var response struct {
 		DailySleepDTO *DailySleepDTO  `json:"dailySleepDto"`
-		SleepMovement []SleepMovement `json:"sleepMovement"`
+		SleepMovement []types.SleepMovement `json:"sleepMovement"` // Using types.SleepMovement
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, err
@@ -68,7 +50,7 @@ func (d *DailySleepDTO) Get(day time.Time, client *client.Client) (any, error) {
 }
 
 // List implements the Data interface for concurrent fetching
-func (d *DailySleepDTO) List(end time.Time, days int, client *client.Client, maxWorkers int) ([]any, error) {
+func (d *DailySleepDTO) List(end time.Time, days int, c shared.APIClient, maxWorkers int) ([]any, error) {
 	// Implementation to be added
 	return []any{}, nil
 }

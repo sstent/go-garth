@@ -6,82 +6,31 @@ import (
 	"sort"
 	"time"
 
-	"go-garth/internal/api/client"
+	shared "go-garth/shared/interfaces"
+	types "go-garth/internal/models/types"
 )
 
-// DailyBodyBatteryStress represents complete daily Body Battery and stress data
-type DailyBodyBatteryStress struct {
-	UserProfilePK          int       `json:"userProfilePk"`
-	CalendarDate           time.Time `json:"calendarDate"`
-	StartTimestampGMT      time.Time `json:"startTimestampGmt"`
-	EndTimestampGMT        time.Time `json:"endTimestampGmt"`
-	StartTimestampLocal    time.Time `json:"startTimestampLocal"`
-	EndTimestampLocal      time.Time `json:"endTimestampLocal"`
-	MaxStressLevel         int       `json:"maxStressLevel"`
-	AvgStressLevel         int       `json:"avgStressLevel"`
-	StressChartValueOffset int       `json:"stressChartValueOffset"`
-	StressChartYAxisOrigin int       `json:"stressChartYAxisOrigin"`
-	StressValuesArray      [][]int   `json:"stressValuesArray"`
-	BodyBatteryValuesArray [][]any   `json:"bodyBatteryValuesArray"`
-}
-
-// BodyBatteryEvent represents a Body Battery impact event
-type BodyBatteryEvent struct {
-	EventType              string    `json:"eventType"`
-	EventStartTimeGMT      time.Time `json:"eventStartTimeGmt"`
-	TimezoneOffset         int       `json:"timezoneOffset"`
-	DurationInMilliseconds int       `json:"durationInMilliseconds"`
-	BodyBatteryImpact      int       `json:"bodyBatteryImpact"`
-	FeedbackType           string    `json:"feedbackType"`
-	ShortFeedback          string    `json:"shortFeedback"`
-}
-
-// BodyBatteryData represents legacy Body Battery events data
-type BodyBatteryData struct {
-	Event                  *BodyBatteryEvent `json:"event"`
-	ActivityName           string            `json:"activityName"`
-	ActivityType           string            `json:"activityType"`
-	ActivityID             string            `json:"activityId"`
-	AverageStress          float64           `json:"averageStress"`
-	StressValuesArray      [][]int           `json:"stressValuesArray"`
-	BodyBatteryValuesArray [][]any           `json:"bodyBatteryValuesArray"`
-}
-
-// BodyBatteryReading represents an individual Body Battery reading
-type BodyBatteryReading struct {
-	Timestamp int     `json:"timestamp"`
-	Status    string  `json:"status"`
-	Level     int     `json:"level"`
-	Version   float64 `json:"version"`
-}
-
-// StressReading represents an individual stress reading
-type StressReading struct {
-	Timestamp   int `json:"timestamp"`
-	StressLevel int `json:"stressLevel"`
-}
-
 // ParseBodyBatteryReadings converts body battery values array to structured readings
-func ParseBodyBatteryReadings(valuesArray [][]any) []BodyBatteryReading {
-	readings := make([]BodyBatteryReading, 0)
+func ParseBodyBatteryReadings(valuesArray [][]any) []types.BodyBatteryReading {
+	readings := make([]types.BodyBatteryReading, 0)
 	for _, values := range valuesArray {
 		if len(values) < 4 {
 			continue
 		}
 
-		timestamp, ok1 := values[0].(int)
+		timestamp, ok1 := values[0].(float64)
 		status, ok2 := values[1].(string)
-		level, ok3 := values[2].(int)
+		level, ok3 := values[2].(float64)
 		version, ok4 := values[3].(float64)
 
 		if !ok1 || !ok2 || !ok3 || !ok4 {
 			continue
 		}
 
-		readings = append(readings, BodyBatteryReading{
-			Timestamp: timestamp,
+		readings = append(readings, types.BodyBatteryReading{
+			Timestamp: int(timestamp),
 			Status:    status,
-			Level:     level,
+			Level:     int(level),
 			Version:   version,
 		})
 	}
@@ -91,48 +40,61 @@ func ParseBodyBatteryReadings(valuesArray [][]any) []BodyBatteryReading {
 	return readings
 }
 
-// ParseStressReadings converts stress values array to structured readings
-func ParseStressReadings(valuesArray [][]int) []StressReading {
-	readings := make([]StressReading, 0)
-	for _, values := range valuesArray {
-		if len(values) != 2 {
-			continue
-		}
-		readings = append(readings, StressReading{
-			Timestamp:   values[0],
-			StressLevel: values[1],
-		})
-	}
-	sort.Slice(readings, func(i, j int) bool {
-		return readings[i].Timestamp < readings[j].Timestamp
-	})
-	return readings
-}
-
-// Get implements the Data interface for DailyBodyBatteryStress
-func (d *DailyBodyBatteryStress) Get(day time.Time, client *client.Client) (any, error) {
+func (d *types.DetailedBodyBatteryData) Get(day time.Time, c shared.APIClient) (interface{}, error) {
 	dateStr := day.Format("2006-01-02")
-	path := fmt.Sprintf("/wellness-service/wellness/dailyStress/%s", dateStr)
 
-	data, err := client.ConnectAPI(path, "GET", nil, nil)
+	// Get main Body Battery data
+	path1 := fmt.Sprintf("/wellness-service/wellness/dailyStress/%s", dateStr)
+	data1, err := c.ConnectAPI(path1, "GET", nil, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get Body Battery stress data: %w", err)
 	}
 
-	if len(data) == 0 {
-		return nil, nil
+	// Get Body Battery events
+	path2 := fmt.Sprintf("/wellness-service/wellness/bodyBattery/%s", dateStr)
+	data2, err := c.ConnectAPI(path2, "GET", nil, nil)
+	if err != nil {
+		// Events might not be available, continue without them
+		data2 = []byte("[]")
 	}
 
-	var result DailyBodyBatteryStress
-	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, err
+	var result types.DetailedBodyBatteryData
+	if len(data1) > 0 {
+		if err := json.Unmarshal(data1, &result); err != nil {
+			return nil, fmt.Errorf("failed to parse Body Battery data: %w", err)
+		}
+	}
+
+	var events []types.BodyBatteryEvent
+	if len(data2) > 0 {
+		if err := json.Unmarshal(data2, &events); err == nil {
+			result.Events = events
+		}
 	}
 
 	return &result, nil
 }
 
-// List implements the Data interface for concurrent fetching
-func (d *DailyBodyBatteryStress) List(end time.Time, days int, client *client.Client, maxWorkers int) ([]any, error) {
-	// Implementation to be added
-	return []any{}, nil
+// GetCurrentLevel returns the most recent Body Battery level
+func (d *types.DetailedBodyBatteryData) GetCurrentLevel() int {
+	if len(d.BodyBatteryValuesArray) == 0 {
+		return 0
+	}
+
+	readings := ParseBodyBatteryReadings(d.BodyBatteryValuesArray)
+	if len(readings) == 0 {
+		return 0
+	}
+
+	return readings[len(readings)-1].Level
+}
+
+// GetDayChange returns the Body Battery change for the day
+func (d *types.DetailedBodyBatteryData) GetDayChange() int {
+	readings := ParseBodyBatteryReadings(d.BodyBatteryValuesArray)
+	if len(readings) < 2 {
+		return 0
+	}
+
+	return readings[len(readings)-1].Level - readings[0].Level
 }

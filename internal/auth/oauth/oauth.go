@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"go-garth/internal/types"
+	"go-garth/internal/models/types"
 	"go-garth/internal/utils"
 )
 

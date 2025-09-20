@@ -8,12 +8,11 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/olekukonko/tablewriter"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	types "go-garth/internal/types"
-	"go-garth/internal/utils"
+	types "go-garth/internal/models/types"
 	"go-garth/pkg/garmin"
 )
 
@@ -116,6 +115,35 @@ func init() {
 
 	healthCmd.AddCommand(hrZonesCmd)
 
+	// Training Status Command
+	trainingStatusCmd = &cobra.Command{
+		Use:   "training-status",
+		Short: "Get Training Status data",
+		Long:  `Fetch Training Status data.`,
+		RunE:  runTrainingStatus,
+	}
+	healthCmd.AddCommand(trainingStatusCmd)
+	trainingStatusCmd.Flags().StringVar(&healthDateFrom, "from", "", "Date for data fetching (YYYY-MM-DD, defaults to today)")
+
+	// Training Load Command
+	trainingLoadCmd = &cobra.Command{
+		Use:   "training-load",
+		Short: "Get Training Load data",
+		Long:  `Fetch Training Load data.`,
+		RunE:  runTrainingLoad,
+	}
+	healthCmd.AddCommand(trainingLoadCmd)
+	trainingLoadCmd.Flags().StringVar(&healthDateFrom, "from", "", "Date for data fetching (YYYY-MM-DD, defaults to today)")
+
+	// Fitness Age Command
+	fitnessAgeCmd = &cobra.Command{
+		Use:   "fitness-age",
+		Short: "Get Fitness Age data",
+		Long:  `Fetch Fitness Age data.`,
+		RunE:  runFitnessAge,
+	}
+	healthCmd.AddCommand(fitnessAgeCmd)
+
 	// Wellness Command
 	wellnessCmd = &cobra.Command{
 		Use:   "wellness",
@@ -131,13 +159,12 @@ func init() {
 }
 
 func runSleep(cmd *cobra.Command, args []string) error {
-	garminClient, err := garmin.NewClient("www.garmin.com") // TODO: Domain should be configurable
+	garminClient, err := garmin.NewClient(viper.GetString("domain"))
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	sessionFile := "garmin_session.json" // TODO: Make session file configurable
-	if err := garminClient.LoadSession(sessionFile); err != nil {
+	if err := garminClient.LoadSession(viper.GetString("session_file")); err != nil {
 		return fmt.Errorf("not logged in: %w", err)
 	}
 
@@ -161,67 +188,27 @@ func runSleep(cmd *cobra.Command, args []string) error {
 		endDate = time.Now() // Default to today
 	}
 
-	sleepData, err := garminClient.GetSleepData(startDate, endDate)
-	if err != nil {
-		return fmt.Errorf("failed to get sleep data: %w", err)
+	var allSleepData []*types.DetailedSleepData
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		sleepData, err := garminClient.GetDetailedSleepData(d)
+		if err != nil {
+			return fmt.Errorf("failed to get sleep data for %s: %w", d.Format("2006-01-02"), err)
+		}
+		if sleepData != nil {
+			allSleepData = append(allSleepData, sleepData)
+		}
 	}
 
-	if len(sleepData) == 0 {
+	if len(allSleepData) == 0 {
 		fmt.Println("No sleep data found.")
 		return nil
 	}
 
-	// Apply aggregation if requested
-	if healthAggregate != "" {
-		aggregatedSleep := make(map[string]struct {
-			TotalSleepSeconds int
-			SleepScore        int
-			Count             int
-		})
-
-		for _, data := range sleepData {
-			key := ""
-			switch healthAggregate {
-			case "day":
-				key = data.Date.Format("2006-01-02")
-			case "week":
-				year, week := data.Date.ISOWeek()
-				key = fmt.Sprintf("%d-W%02d", year, week)
-			case "month":
-				key = data.Date.Format("2006-01")
-			case "year":
-				key = data.Date.Format("2006")
-			default:
-				return fmt.Errorf("unsupported aggregation period: %s", healthAggregate)
-			}
-
-			entry := aggregatedSleep[key]
-			entry.TotalSleepSeconds += data.TotalSleepSeconds
-			entry.SleepScore += data.SleepScore
-			entry.Count++
-			aggregatedSleep[key] = entry
-		}
-
-		// Convert aggregated data back to a slice for output
-		sleepData = []types.SleepData{}
-		for key, entry := range aggregatedSleep {
-			sleepData = append(sleepData, types.SleepData{
-				Date:              utils.ParseAggregationKey(key, healthAggregate),
-				TotalSleepSeconds: entry.TotalSleepSeconds / entry.Count,
-				SleepScore:        entry.SleepScore / entry.Count,
-				DeepSleepSeconds:  0,
-				LightSleepSeconds: 0,
-				RemSleepSeconds:   0,
-				AwakeSleepSeconds: 0,
-			})
-		}
-	}
-
-	outputFormat := viper.GetString("output")
+	outputFormat := viper.GetString("output.format")
 
 	switch outputFormat {
 	case "json":
-		data, err := json.MarshalIndent(sleepData, "", "  ")
+		data, err := json.MarshalIndent(allSleepData, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal sleep data to JSON: %w", err)
 		}
@@ -230,33 +217,38 @@ func runSleep(cmd *cobra.Command, args []string) error {
 		writer := csv.NewWriter(os.Stdout)
 		defer writer.Flush()
 
-		writer.Write([]string{"Date", "SleepScore", "TotalSleepSeconds", "DeepSleepSeconds", "LightSleepSeconds", "RemSleepSeconds", "AwakeSleepSeconds"})
-		for _, data := range sleepData {
+		writer.Write([]string{"Date", "SleepScore", "TotalSleep", "Deep", "Light", "REM", "Awake", "AvgSpO2", "LowestSpO2", "AvgRespiration"})
+		for _, data := range allSleepData {
 			writer.Write([]string{
-				data.Date.Format("2006-01-02"),
-				fmt.Sprintf("%d", data.SleepScore),
-				fmt.Sprintf("%d", data.TotalSleepSeconds),
-				fmt.Sprintf("%d", data.DeepSleepSeconds),
-				fmt.Sprintf("%d", data.LightSleepSeconds),
-				fmt.Sprintf("%d", data.RemSleepSeconds),
-				fmt.Sprintf("%d", data.AwakeSleepSeconds),
-			})
-		}
-	case "table":
-		table := tablewriter.NewWriter(os.Stdout)
-		table.Header([]string{"Date", "Score", "Total Sleep", "Deep", "Light", "REM", "Awake"})
-		for _, data := range sleepData {
-			table.Append([]string{
-				data.Date.Format("2006-01-02"),
-				fmt.Sprintf("%d", data.SleepScore),
-				(time.Duration(data.TotalSleepSeconds) * time.Second).String(),
+				data.CalendarDate.Format("2006-01-02"),
+				fmt.Sprintf("%d", data.SleepScores.Overall),
+				(time.Duration(data.DeepSleepSeconds+data.LightSleepSeconds+data.RemSleepSeconds) * time.Second).String(),
 				(time.Duration(data.DeepSleepSeconds) * time.Second).String(),
 				(time.Duration(data.LightSleepSeconds) * time.Second).String(),
 				(time.Duration(data.RemSleepSeconds) * time.Second).String(),
 				(time.Duration(data.AwakeSleepSeconds) * time.Second).String(),
+				func() string { if data.AverageSpO2Value != nil { return fmt.Sprintf("%.2f", *data.AverageSpO2Value) } ; return "N/A" }(),
+				func() string { if data.LowestSpO2Value != nil { return fmt.Sprintf("%d", *data.LowestSpO2Value) } ; return "N/A" }(),
+				func() string { if data.AverageRespirationValue != nil { return fmt.Sprintf("%.2f", *data.AverageRespirationValue) } ; return "N/A" }(),
 			})
 		}
-		table.Render()
+	case "table":
+		tbl := table.New("Date", "Score", "Total Sleep", "Deep", "Light", "REM", "Awake", "Avg SpO2", "Lowest SpO2", "Avg Resp")
+		for _, data := range allSleepData {
+			tbl.AddRow(
+				data.CalendarDate.Format("2006-01-02"),
+				fmt.Sprintf("%d", data.SleepScores.Overall),
+				(time.Duration(data.DeepSleepSeconds+data.LightSleepSeconds+data.RemSleepSeconds) * time.Second).String(),
+				(time.Duration(data.DeepSleepSeconds) * time.Second).String(),
+				(time.Duration(data.LightSleepSeconds) * time.Second).String(),
+				(time.Duration(data.RemSleepSeconds) * time.Second).String(),
+				(time.Duration(data.AwakeSleepSeconds) * time.Second).String(),
+				func() string { if data.AverageSpO2Value != nil { return fmt.Sprintf("%.2f", *data.AverageSpO2Value) } ; return "N/A" }(),
+				func() string { if data.LowestSpO2Value != nil { return fmt.Sprintf("%d", *data.LowestSpO2Value) } ; return "N/A" }(),
+				func() string { if data.AverageRespirationValue != nil { return fmt.Sprintf("%.2f", *data.AverageRespirationValue) } ; return "N/A" }(),
+			)
+		}
+		tbl.Print()
 	default:
 		return fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
@@ -265,13 +257,12 @@ func runSleep(cmd *cobra.Command, args []string) error {
 }
 
 func runHrv(cmd *cobra.Command, args []string) error {
-	garminClient, err := garmin.NewClient("www.garmin.com") // TODO: Domain should be configurable
+	garminClient, err := garmin.NewClient(viper.GetString("domain"))
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	sessionFile := "garmin_session.json" // TODO: Make session file configurable
-	if err := garminClient.LoadSession(sessionFile); err != nil {
+	if err := garminClient.LoadSession(viper.GetString("session_file")); err != nil {
 		return fmt.Errorf("not logged in: %w", err)
 	}
 
@@ -280,60 +271,27 @@ func runHrv(cmd *cobra.Command, args []string) error {
 		days = 7 // Default to 7 days if not specified
 	}
 
-	hrvData, err := garminClient.GetHrvData(days)
-	if err != nil {
-		return fmt.Errorf("failed to get HRV data: %w", err)
+	var allHrvData []*types.DailyHRVData
+	for d := time.Now().AddDate(0, 0, -days+1); !d.After(time.Now()); d = d.AddDate(0, 0, 1) {
+		hrvData, err := garminClient.GetDailyHRVData(d)
+		if err != nil {
+			return fmt.Errorf("failed to get HRV data for %s: %w", d.Format("2006-01-02"), err)
+		}
+		if hrvData != nil {
+			allHrvData = append(allHrvData, hrvData)
+		}
 	}
 
-	if len(hrvData) == 0 {
+	if len(allHrvData) == 0 {
 		fmt.Println("No HRV data found.")
 		return nil
 	}
 
-	// Apply aggregation if requested
-	if healthAggregate != "" {
-		aggregatedHrv := make(map[string]struct {
-			HrvValue float64
-			Count    int
-		})
-
-		for _, data := range hrvData {
-			key := ""
-			switch healthAggregate {
-			case "day":
-				key = data.Date.Format("2006-01-02")
-			case "week":
-				year, week := data.Date.ISOWeek()
-				key = fmt.Sprintf("%d-W%02d", year, week)
-			case "month":
-				key = data.Date.Format("2006-01")
-			case "year":
-				key = data.Date.Format("2006")
-			default:
-				return fmt.Errorf("unsupported aggregation period: %s", healthAggregate)
-			}
-
-			entry := aggregatedHrv[key]
-			entry.HrvValue += data.HrvValue
-			entry.Count++
-			aggregatedHrv[key] = entry
-		}
-
-		// Convert aggregated data back to a slice for output
-		hrvData = []types.HrvData{}
-		for key, entry := range aggregatedHrv {
-			hrvData = append(hrvData, types.HrvData{
-				Date:     utils.ParseAggregationKey(key, healthAggregate),
-				HrvValue: entry.HrvValue / float64(entry.Count),
-			})
-		}
-	}
-
-	outputFormat := viper.GetString("output")
+	outputFormat := viper.GetString("output.format")
 
 	switch outputFormat {
 	case "json":
-		data, err := json.MarshalIndent(hrvData, "", "  ")
+		data, err := json.MarshalIndent(allHrvData, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal HRV data to JSON: %w", err)
 		}
@@ -342,23 +300,28 @@ func runHrv(cmd *cobra.Command, args []string) error {
 		writer := csv.NewWriter(os.Stdout)
 		defer writer.Flush()
 
-		writer.Write([]string{"Date", "HRV Value"})
-		for _, data := range hrvData {
+		writer.Write([]string{"Date", "WeeklyAvg", "LastNightAvg", "Status", "Feedback"})
+		for _, data := range allHrvData {
 			writer.Write([]string{
-				data.Date.Format("2006-01-02"),
-				fmt.Sprintf("%.2f", data.HrvValue),
+				data.CalendarDate.Format("2006-01-02"),
+				func() string { if data.WeeklyAvg != nil { return fmt.Sprintf("%.2f", *data.WeeklyAvg) } ; return "N/A" }(),
+				func() string { if data.LastNightAvg != nil { return fmt.Sprintf("%.2f", *data.LastNightAvg) } ; return "N/A" }(),
+				data.Status,
+				data.FeedbackPhrase,
 			})
 		}
 	case "table":
-		table := tablewriter.NewWriter(os.Stdout)
-		table.Header([]string{"Date", "HRV Value"})
-		for _, data := range hrvData {
-			table.Append([]string{
-				data.Date.Format("2006-01-02"),
-				fmt.Sprintf("%.2f", data.HrvValue),
-			})
+		tbl := table.New("Date", "Weekly Avg", "Last Night Avg", "Status", "Feedback")
+		for _, data := range allHrvData {
+			tbl.AddRow(
+				data.CalendarDate.Format("2006-01-02"),
+				func() string { if data.WeeklyAvg != nil { return fmt.Sprintf("%.2f", *data.WeeklyAvg) } ; return "N/A" }(),
+				func() string { if data.LastNightAvg != nil { return fmt.Sprintf("%.2f", *data.LastNightAvg) } ; return "N/A" }(),
+				data.Status,
+				data.FeedbackPhrase,
+			)
 		}
-		table.Render()
+		tbl.Print()
 	default:
 		return fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
@@ -435,7 +398,7 @@ func runStress(cmd *cobra.Command, args []string) error {
 		stressData = []types.StressData{}
 		for key, entry := range aggregatedStress {
 			stressData = append(stressData, types.StressData{
-				Date:            utils.ParseAggregationKey(key, healthAggregate),
+				Date: types.ParseAggregationKey(key, healthAggregate),
 				StressLevel:     entry.StressLevel / entry.Count,
 				RestStressLevel: entry.RestStressLevel / entry.Count,
 			})
@@ -464,16 +427,15 @@ func runStress(cmd *cobra.Command, args []string) error {
 			})
 		}
 	case "table":
-		table := tablewriter.NewWriter(os.Stdout)
-		table.Header([]string{"Date", "Stress Level", "Rest Stress Level"})
+		tbl := table.New("Date", "Stress Level", "Rest Stress Level")
 		for _, data := range stressData {
-			table.Append([]string{
+			tbl.AddRow(
 				data.Date.Format("2006-01-02"),
 				fmt.Sprintf("%d", data.StressLevel),
 				fmt.Sprintf("%d", data.RestStressLevel),
-			})
+			)
 		}
-		table.Render()
+		tbl.Print()
 	default:
 		return fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
@@ -482,82 +444,33 @@ func runStress(cmd *cobra.Command, args []string) error {
 }
 
 func runBodyBattery(cmd *cobra.Command, args []string) error {
-	garminClient, err := garmin.NewClient("www.garmin.com") // TODO: Domain should be configurable
+	garminClient, err := garmin.NewClient(viper.GetString("domain"))
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	sessionFile := "garmin_session.json" // TODO: Make session file configurable
-	if err := garminClient.LoadSession(sessionFile); err != nil {
+	if err := garminClient.LoadSession(viper.GetString("session_file")); err != nil {
 		return fmt.Errorf("not logged in: %w", err)
 	}
 
-	var startDate, endDate time.Time
+	var targetDate time.Time
 	if healthYesterday {
-		startDate = time.Now().AddDate(0, 0, -1)
-		endDate = startDate
+		targetDate = time.Now().AddDate(0, 0, -1)
 	} else {
-		// Default to today if no specific range or yesterday is given
-		startDate = time.Now()
-		endDate = time.Now()
+		targetDate = time.Now()
 	}
 
-	bodyBatteryData, err := garminClient.GetBodyBatteryData(startDate, endDate)
+	bodyBatteryData, err := garminClient.GetDetailedBodyBatteryData(targetDate)
 	if err != nil {
 		return fmt.Errorf("failed to get Body Battery data: %w", err)
 	}
 
-	if len(bodyBatteryData) == 0 {
+	if bodyBatteryData == nil {
 		fmt.Println("No Body Battery data found.")
 		return nil
 	}
 
-	// Apply aggregation if requested
-	if healthAggregate != "" {
-		aggregatedBodyBattery := make(map[string]struct {
-			BatteryLevel int
-			Charge       int
-			Drain        int
-			Count        int
-		})
-
-		for _, data := range bodyBatteryData {
-			key := ""
-			switch healthAggregate {
-			case "day":
-				key = data.Date.Format("2006-01-02")
-			case "week":
-				year, week := data.Date.ISOWeek()
-				key = fmt.Sprintf("%d-W%02d", year, week)
-			case "month":
-				key = data.Date.Format("2006-01")
-			case "year":
-				key = data.Date.Format("2006")
-			default:
-				return fmt.Errorf("unsupported aggregation period: %s", healthAggregate)
-			}
-
-			entry := aggregatedBodyBattery[key]
-			entry.BatteryLevel += data.BatteryLevel
-			entry.Charge += data.Charge
-			entry.Drain += data.Drain
-			entry.Count++
-			aggregatedBodyBattery[key] = entry
-		}
-
-		// Convert aggregated data back to a slice for output
-		bodyBatteryData = []types.BodyBatteryData{}
-		for key, entry := range aggregatedBodyBattery {
-			bodyBatteryData = append(bodyBatteryData, types.BodyBatteryData{
-				Date:         utils.ParseAggregationKey(key, healthAggregate),
-				BatteryLevel: entry.BatteryLevel / entry.Count,
-				Charge:       entry.Charge / entry.Count,
-				Drain:        entry.Drain / entry.Count,
-			})
-		}
-	}
-
-	outputFormat := viper.GetString("output")
+	outputFormat := viper.GetString("output.format")
 
 	switch outputFormat {
 	case "json":
@@ -570,27 +483,24 @@ func runBodyBattery(cmd *cobra.Command, args []string) error {
 		writer := csv.NewWriter(os.Stdout)
 		defer writer.Flush()
 
-		writer.Write([]string{"Date", "BatteryLevel", "Charge", "Drain"})
-		for _, data := range bodyBatteryData {
-			writer.Write([]string{
-				data.Date.Format("2006-01-02"),
-				fmt.Sprintf("%d", data.BatteryLevel),
-				fmt.Sprintf("%d", data.Charge),
-				fmt.Sprintf("%d", data.Drain),
-			})
-		}
+		writer.Write([]string{"Date", "CurrentLevel", "DayChange", "MaxStressLevel", "AvgStressLevel"})
+		writer.Write([]string{
+			bodyBatteryData.CalendarDate.Format("2006-01-02"),
+			fmt.Sprintf("%d", bodyBatteryData.GetCurrentLevel()),
+			fmt.Sprintf("%d", bodyBatteryData.GetDayChange()),
+			fmt.Sprintf("%d", bodyBatteryData.MaxStressLevel),
+			fmt.Sprintf("%d", bodyBatteryData.AvgStressLevel),
+		})
 	case "table":
-		table := tablewriter.NewWriter(os.Stdout)
-		table.Header([]string{"Date", "Battery Level", "Charge", "Drain"})
-		for _, data := range bodyBatteryData {
-			table.Append([]string{
-				data.Date.Format("2006-01-02"),
-				fmt.Sprintf("%d", data.BatteryLevel),
-				fmt.Sprintf("%d", data.Charge),
-				fmt.Sprintf("%d", data.Drain),
-			})
-		}
-		table.Render()
+		tbl := table.New("Date", "Current Level", "Day Change", "Max Stress", "Avg Stress")
+		tbl.AddRow(
+			bodyBatteryData.CalendarDate.Format("2006-01-02"),
+			fmt.Sprintf("%d", bodyBatteryData.GetCurrentLevel()),
+			fmt.Sprintf("%d", bodyBatteryData.GetDayChange()),
+			fmt.Sprintf("%d", bodyBatteryData.MaxStressLevel),
+			fmt.Sprintf("%d", bodyBatteryData.AvgStressLevel),
+		)
+		tbl.Print()
 	default:
 		return fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
@@ -599,93 +509,30 @@ func runBodyBattery(cmd *cobra.Command, args []string) error {
 }
 
 func runVO2Max(cmd *cobra.Command, args []string) error {
-	garminClient, err := garmin.NewClient("www.garmin.com") // TODO: Domain should be configurable
+	client, err := garmin.NewClient(viper.GetString("domain"))
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	sessionFile := "garmin_session.json" // TODO: Make session file configurable
-	if err := garminClient.LoadSession(sessionFile); err != nil {
+	if err := client.LoadSession(viper.GetString("session_file")); err != nil {
 		return fmt.Errorf("not logged in: %w", err)
 	}
 
-	var startDate, endDate time.Time
-
-	if healthDateFrom != "" {
-		startDate, err = time.Parse("2006-01-02", healthDateFrom)
-		if err != nil {
-			return fmt.Errorf("invalid date format for --from: %w", err)
-		}
-	} else {
-		startDate = time.Now().AddDate(0, 0, -7) // Default to last 7 days
-	}
-
-	if healthDateTo != "" {
-		endDate = time.Now() // Default to today
-		parsedDate, err := time.Parse("2006-01-02", healthDateTo)
-		if err != nil {
-			return fmt.Errorf("invalid date format for --to: %w", err)
-		}
-		endDate = parsedDate
-	}
-
-	vo2maxData, err := garminClient.GetVO2MaxData(startDate, endDate)
+	profile, err := client.InternalClient().GetCurrentVO2Max()
 	if err != nil {
 		return fmt.Errorf("failed to get VO2 Max data: %w", err)
 	}
 
-	if len(vo2maxData) == 0 {
+	if profile.Running == nil && profile.Cycling == nil {
 		fmt.Println("No VO2 Max data found.")
 		return nil
 	}
 
-	// Apply aggregation if requested
-	if healthAggregate != "" {
-		aggregatedVO2Max := make(map[string]struct {
-			VO2MaxRunning float64
-			VO2MaxCycling float64
-			Count         int
-		})
-
-		for _, data := range vo2maxData {
-			key := ""
-			switch healthAggregate {
-			case "day":
-				key = data.Date.Format("2006-01-02")
-			case "week":
-				year, week := data.Date.ISOWeek()
-				key = fmt.Sprintf("%d-W%02d", year, week)
-			case "month":
-				key = data.Date.Format("2006-01")
-			case "year":
-				key = data.Date.Format("2006")
-			default:
-				return fmt.Errorf("unsupported aggregation period: %s", healthAggregate)
-			}
-
-			entry := aggregatedVO2Max[key]
-			entry.VO2MaxRunning += data.VO2MaxRunning
-			entry.VO2MaxCycling += data.VO2MaxCycling
-			entry.Count++
-			aggregatedVO2Max[key] = entry
-		}
-
-		// Convert aggregated data back to a slice for output
-		vo2maxData = []types.VO2MaxData{}
-		for key, entry := range aggregatedVO2Max {
-			vo2maxData = append(vo2maxData, types.VO2MaxData{
-				Date:          utils.ParseAggregationKey(key, healthAggregate),
-				VO2MaxRunning: entry.VO2MaxRunning / float64(entry.Count),
-				VO2MaxCycling: entry.VO2MaxCycling / float64(entry.Count),
-			})
-		}
-	}
-
-	outputFormat := viper.GetString("output")
+	outputFormat := viper.GetString("output.format")
 
 	switch outputFormat {
 	case "json":
-		data, err := json.MarshalIndent(vo2maxData, "", "  ")
+		data, err := json.MarshalIndent(profile, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal VO2 Max data to JSON: %w", err)
 		}
@@ -694,25 +541,43 @@ func runVO2Max(cmd *cobra.Command, args []string) error {
 		writer := csv.NewWriter(os.Stdout)
 		defer writer.Flush()
 
-		writer.Write([]string{"Date", "VO2MaxRunning", "VO2MaxCycling"})
-		for _, data := range vo2maxData {
+		writer.Write([]string{"Type", "Value", "Date", "Source"})
+		if profile.Running != nil {
 			writer.Write([]string{
-				data.Date.Format("2006-01-02"),
-				fmt.Sprintf("%.2f", data.VO2MaxRunning),
-				fmt.Sprintf("%.2f", data.VO2MaxCycling),
+				profile.Running.ActivityType,
+				fmt.Sprintf("%.2f", profile.Running.Value),
+				profile.Running.Date.Format("2006-01-02"),
+				profile.Running.Source,
+			})
+		}
+		if profile.Cycling != nil {
+			writer.Write([]string{
+				profile.Cycling.ActivityType,
+				fmt.Sprintf("%.2f", profile.Cycling.Value),
+				profile.Cycling.Date.Format("2006-01-02"),
+				profile.Cycling.Source,
 			})
 		}
 	case "table":
-		table := tablewriter.NewWriter(os.Stdout)
-		table.Header([]string{"Date", "VO2 Max Running", "VO2 Max Cycling"})
-		for _, data := range vo2maxData {
-			table.Append([]string{
-				data.Date.Format("2006-01-02"),
-				fmt.Sprintf("%.2f", data.VO2MaxRunning),
-				fmt.Sprintf("%.2f", data.VO2MaxCycling),
-			})
+		tbl := table.New("Type", "Value", "Date", "Source")
+
+		if profile.Running != nil {
+			tbl.AddRow(
+				profile.Running.ActivityType,
+				fmt.Sprintf("%.2f", profile.Running.Value),
+				profile.Running.Date.Format("2006-01-02"),
+				profile.Running.Source,
+			)
 		}
-		table.Render()
+		if profile.Cycling != nil {
+			tbl.AddRow(
+				profile.Cycling.ActivityType,
+				fmt.Sprintf("%.2f", profile.Cycling.Value),
+				profile.Cycling.Date.Format("2006-01-02"),
+				profile.Cycling.Source,
+			)
+		}
+		tbl.Print()
 	default:
 		return fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
@@ -721,13 +586,12 @@ func runVO2Max(cmd *cobra.Command, args []string) error {
 }
 
 func runHRZones(cmd *cobra.Command, args []string) error {
-	garminClient, err := garmin.NewClient("www.garmin.com") // TODO: Domain should be configurable
+	garminClient, err := garmin.NewClient(viper.GetString("domain"))
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	sessionFile := "garmin_session.json" // TODO: Make session file configurable
-	if err := garminClient.LoadSession(sessionFile); err != nil {
+	if err := garminClient.LoadSession(viper.GetString("session_file")); err != nil {
 		return fmt.Errorf("not logged in: %w", err)
 	}
 
@@ -764,29 +628,27 @@ func runHRZones(cmd *cobra.Command, args []string) error {
 			})
 		}
 	case "table":
-		table := tablewriter.NewWriter(os.Stdout)
-		table.Header([]string{"Resting HR", "Max HR", "Lactate Threshold", "Updated At"})
-		table.Append([]string{
+tbl := table.New("Resting HR", "Max HR", "Lactate Threshold", "Updated At")
+		tbl.AddRow(
 			strconv.Itoa(hrZonesData.RestingHR),
 			strconv.Itoa(hrZonesData.MaxHR),
 			strconv.Itoa(hrZonesData.LactateThreshold),
 			hrZonesData.UpdatedAt.Format("2006-01-02 15:04:05"),
-		})
-		table.Render()
+		)
+		tbl.Print()
 
 		fmt.Println()
 
-		zonesTable := tablewriter.NewWriter(os.Stdout)
-		zonesTable.Header([]string{"Zone", "Min BPM", "Max BPM", "Name"})
+		zonesTable := table.New("Zone", "Min BPM", "Max BPM", "Name")
 		for _, zone := range hrZonesData.Zones {
-			zonesTable.Append([]string{
+			zonesTable.AddRow(
 				strconv.Itoa(zone.Zone),
 				strconv.Itoa(zone.MinBPM),
 				strconv.Itoa(zone.MaxBPM),
 				zone.Name,
-			})
+			)
 		}
-		zonesTable.Render()
+		zonesTable.Print()
 	default:
 		return fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
@@ -798,4 +660,190 @@ var wellnessCmd *cobra.Command
 
 func runWellness(cmd *cobra.Command, args []string) error {
 	return fmt.Errorf("not implemented")
+}
+
+func runTrainingStatus(cmd *cobra.Command, args []string) error {
+	garminClient, err := garmin.NewClient(viper.GetString("domain"))
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+
+	if err := garminClient.LoadSession(viper.GetString("session_file")); err != nil {
+		return fmt.Errorf("not logged in: %w", err)
+	}
+
+	var targetDate time.Time
+	if healthDateFrom != "" {
+		targetDate, err = time.Parse("2006-01-02", healthDateFrom)
+		if err != nil {
+			return fmt.Errorf("invalid date format for --from: %w", err)
+		}
+	} else {
+		targetDate = time.Now()
+	}
+
+	trainingStatus, err := garminClient.GetTrainingStatus(targetDate)
+	if err != nil {
+		return fmt.Errorf("failed to get training status: %w", err)
+	}
+
+	if trainingStatus == nil {
+		fmt.Println("No training status data found.")
+		return nil
+	}
+
+	outputFormat := viper.GetString("output.format")
+
+	switch outputFormat {
+	case "json":
+		data, err := json.MarshalIndent(trainingStatus, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal training status to JSON: %w", err)
+		}
+		fmt.Println(string(data))
+	case "csv":
+		writer := csv.NewWriter(os.Stdout)
+		defer writer.Flush()
+
+		writer.Write([]string{"Date", "Status", "LoadRatio"})
+		writer.Write([]string{
+			trainingStatus.CalendarDate.Format("2006-01-02"),
+			trainingStatus.TrainingStatusKey,
+			fmt.Sprintf("%.2f", trainingStatus.LoadRatio),
+		})
+	case "table":
+		tbl := table.New("Date", "Status", "Load Ratio")
+		tbl.AddRow(
+			trainingStatus.CalendarDate.Format("2006-01-02"),
+			trainingStatus.TrainingStatusKey,
+			fmt.Sprintf("%.2f", trainingStatus.LoadRatio),
+		)
+		tbl.Print()
+	default:
+		return fmt.Errorf("unsupported output format: %s", outputFormat)
+	}
+
+	return nil
+}
+
+func runTrainingLoad(cmd *cobra.Command, args []string) error {
+	garminClient, err := garmin.NewClient(viper.GetString("domain"))
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+
+	if err := garminClient.LoadSession(viper.GetString("session_file")); err != nil {
+		return fmt.Errorf("not logged in: %w", err)
+	}
+
+	var targetDate time.Time
+	if healthDateFrom != "" {
+		targetDate, err = time.Parse("2006-01-02", healthDateFrom)
+		if err != nil {
+			return fmt.Errorf("invalid date format for --from: %w", err)
+		}
+	} else {
+		targetDate = time.Now()
+	}
+
+	trainingLoad, err := garminClient.GetTrainingLoad(targetDate)
+	if err != nil {
+		return fmt.Errorf("failed to get training load: %w", err)
+	}
+
+	if trainingLoad == nil {
+		fmt.Println("No training load data found.")
+		return nil
+	}
+
+	outputFormat := viper.GetString("output.format")
+
+	switch outputFormat {
+	case "json":
+		data, err := json.MarshalIndent(trainingLoad, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal training load to JSON: %w", err)
+		}
+		fmt.Println(string(data))
+	case "csv":
+		writer := csv.NewWriter(os.Stdout)
+		defer writer.Flush()
+
+		writer.Write([]string{"Date", "AcuteLoad", "ChronicLoad", "LoadRatio"})
+		writer.Write([]string{
+			trainingLoad.CalendarDate.Format("2006-01-02"),
+			fmt.Sprintf("%.2f", trainingLoad.AcuteTrainingLoad),
+			fmt.Sprintf("%.2f", trainingLoad.ChronicTrainingLoad),
+			fmt.Sprintf("%.2f", trainingLoad.TrainingLoadRatio),
+		})
+	case "table":
+		tbl := table.New("Date", "Acute Load", "Chronic Load", "Load Ratio")
+		tbl.AddRow(
+			trainingLoad.CalendarDate.Format("2006-01-02"),
+			fmt.Sprintf("%.2f", trainingLoad.AcuteTrainingLoad),
+			fmt.Sprintf("%.2f", trainingLoad.ChronicTrainingLoad),
+			fmt.Sprintf("%.2f", trainingLoad.TrainingLoadRatio),
+		)
+		tbl.Print()
+	default:
+		return fmt.Errorf("unsupported output format: %s", outputFormat)
+	}
+
+	return nil
+}
+
+func runFitnessAge(cmd *cobra.Command, args []string) error {
+	garminClient, err := garmin.NewClient(viper.GetString("domain"))
+	if err != nil {
+		return fmt.Errorf("failed to create client: %w", err)
+	}
+
+	if err := garminClient.LoadSession(viper.GetString("session_file")); err != nil {
+		return fmt.Errorf("not logged in: %w", err)
+	}
+
+	fitnessAge, err := garminClient.GetFitnessAge()
+	if err != nil {
+		return fmt.Errorf("failed to get fitness age: %w", err)
+	}
+
+	if fitnessAge == nil {
+		fmt.Println("No fitness age data found.")
+		return nil
+	}
+
+	outputFormat := viper.GetString("output.format")
+
+	switch outputFormat {
+	case "json":
+		data, err := json.MarshalIndent(fitnessAge, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal fitness age to JSON: %w", err)
+		}
+		fmt.Println(string(data))
+	case "csv":
+		writer := csv.NewWriter(os.Stdout)
+		defer writer.Flush()
+
+		writer.Write([]string{"FitnessAge", "ChronologicalAge", "VO2MaxRunning", "LastUpdated"})
+		writer.Write([]string{
+			fmt.Sprintf("%d", fitnessAge.FitnessAge),
+			fmt.Sprintf("%d", fitnessAge.ChronologicalAge),
+			fmt.Sprintf("%.2f", fitnessAge.VO2MaxRunning),
+			fitnessAge.LastUpdated.Format("2006-01-02"),
+		})
+	case "table":
+		tbl := table.New("Fitness Age", "Chronological Age", "VO2 Max Running", "Last Updated")
+		tbl.AddRow(
+			fmt.Sprintf("%d", fitnessAge.FitnessAge),
+			fmt.Sprintf("%d", fitnessAge.ChronologicalAge),
+			fmt.Sprintf("%.2f", fitnessAge.VO2MaxRunning),
+			fitnessAge.LastUpdated.Format("2006-01-02"),
+		)
+		tbl.Print()
+	default:
+		return fmt.Errorf("unsupported output format: %s", outputFormat)
+	}
+
+	return nil
 }

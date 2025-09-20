@@ -8,13 +8,16 @@ import (
 
 	internalClient "go-garth/internal/api/client"
 	"go-garth/internal/errors"
-	"go-garth/internal/types"
+	types "go-garth/internal/models/types"
+	shared "go-garth/shared/interfaces"
 )
 
 // Client is the main Garmin Connect client type
 type Client struct {
 	Client *internalClient.Client
 }
+
+var _ shared.APIClient = (*Client)(nil)
 
 // NewClient creates a new Garmin Connect client
 func NewClient(domain string) (*Client, error) {
@@ -23,6 +26,35 @@ func NewClient(domain string) (*Client, error) {
 		return nil, err
 	}
 	return &Client{Client: c}, nil
+}
+
+func (c *Client) InternalClient() *internalClient.Client {
+	return c.Client
+}
+
+// ConnectAPI implements the APIClient interface
+func (c *Client) ConnectAPI(path string, method string, params url.Values, body io.Reader) ([]byte, error) {
+	return c.Client.ConnectAPI(path, method, params, body)
+}
+
+// GetUsername implements the APIClient interface
+func (c *Client) GetUsername() string {
+	return c.Client.GetUsername()
+}
+
+// GetUserSettings implements the APIClient interface
+func (c *Client) GetUserSettings() (*types.UserSettings, error) {
+	return c.Client.GetUserSettings()
+}
+
+// GetUserProfile implements the APIClient interface
+func (c *Client) GetUserProfile() (*types.UserProfile, error) {
+	return c.Client.GetUserProfile()
+}
+
+// GetWellnessData implements the APIClient interface
+func (c *Client) GetWellnessData(startDate, endDate time.Time) ([]types.WellnessData, error) {
+	return c.Client.GetWellnessData(startDate, endDate)
 }
 
 // Login authenticates to Garmin Connect
@@ -133,13 +165,13 @@ func (c *Client) SearchActivities(query string) ([]Activity, error) {
 }
 
 // GetSleepData retrieves sleep data for a specified date range
-func (c *Client) GetSleepData(startDate, endDate time.Time) ([]types.SleepData, error) {
-	return c.Client.GetSleepData(startDate, endDate)
+func (c *Client) GetSleepData(date time.Time) (*types.DetailedSleepData, error) {
+	return c.Client.GetDetailedSleepData(date)
 }
 
 // GetHrvData retrieves HRV data for a specified number of days
-func (c *Client) GetHrvData(days int) ([]types.HrvData, error) {
-	return c.Client.GetHrvData(days)
+func (c *Client) GetHrvData(date time.Time) (*types.DailyHRVData, error) {
+	return c.Client.GetDailyHRVData(date)
 }
 
 // GetStressData retrieves stress data
@@ -148,8 +180,8 @@ func (c *Client) GetStressData(startDate, endDate time.Time) ([]types.StressData
 }
 
 // GetBodyBatteryData retrieves Body Battery data
-func (c *Client) GetBodyBatteryData(startDate, endDate time.Time) ([]types.BodyBatteryData, error) {
-	return c.Client.GetBodyBatteryData(startDate, endDate)
+func (c *Client) GetBodyBatteryData(date time.Time) (*types.DetailedBodyBatteryData, error) {
+	return c.Client.GetDetailedBodyBatteryData(date)
 }
 
 // GetStepsData retrieves steps data for a specified date range
@@ -180,6 +212,21 @@ func (c *Client) GetHeartRateZones() (*types.HeartRateZones, error) {
 // GetWellnessData retrieves comprehensive wellness data for a specified date range
 func (c *Client) GetWellnessData(startDate, endDate time.Time) ([]types.WellnessData, error) {
 	return c.Client.GetWellnessData(startDate, endDate)
+}
+
+// GetTrainingStatus retrieves current training status
+func (c *Client) GetTrainingStatus(date time.Time) (*types.TrainingStatus, error) {
+	return c.Client.GetTrainingStatus(date)
+}
+
+// GetTrainingLoad retrieves training load data
+func (c *Client) GetTrainingLoad(date time.Time) (*types.TrainingLoad, error) {
+	return c.Client.GetTrainingLoad(date)
+}
+
+// GetFitnessAge retrieves fitness age calculation
+func (c *Client) GetFitnessAge() (*types.FitnessAge, error) {
+	return c.Client.GetFitnessAge()
 }
 
 // OAuth1Token returns the OAuth1 token

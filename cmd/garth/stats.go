@@ -7,12 +7,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/olekukonko/tablewriter"
+	"github.com/rodaine/table"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	types "go-garth/internal/types"
-	"go-garth/internal/utils"
+	types "go-garth/internal/models/types"
 	"go-garth/pkg/garmin"
 )
 
@@ -87,7 +86,7 @@ func runDistance(cmd *cobra.Command, args []string) error {
 		distanceData = []types.DistanceData{}
 		for key, entry := range aggregatedDistance {
 			distanceData = append(distanceData, types.DistanceData{
-				Date:     utils.ParseAggregationKey(key, statsAggregate), // Helper to parse key back to date
+				Date:     types.ParseAggregationKey(key, statsAggregate), // Helper to parse key back to date
 				Distance: entry.Distance / float64(entry.Count),
 			})
 		}
@@ -114,15 +113,14 @@ func runDistance(cmd *cobra.Command, args []string) error {
 			})
 		}
 	case "table":
-		table := tablewriter.NewWriter(os.Stdout)
-		table.Header([]string{"Date", "Distance (km)"})
+		tbl := table.New("Date", "Distance (km)")
 		for _, data := range distanceData {
-			table.Append([]string{
+			tbl.AddRow(
 				data.Date.Format("2006-01-02"),
 				fmt.Sprintf("%.2f", data.Distance/1000),
-			})
+			)
 		}
-		table.Render()
+		tbl.Print()
 	default:
 		return fmt.Errorf("unsupported output format: %s", outputFormat)
 	}
@@ -197,7 +195,7 @@ func runCalories(cmd *cobra.Command, args []string) error {
 		caloriesData = []types.CaloriesData{}
 		for key, entry := range aggregatedCalories {
 			caloriesData = append(caloriesData, types.CaloriesData{
-				Date:     utils.ParseAggregationKey(key, statsAggregate), // Helper to parse key back to date
+				Date:     types.ParseAggregationKey(key, statsAggregate), // Helper to parse key back to date
 				Calories: entry.Calories / entry.Count,
 			})
 		}
@@ -224,15 +222,14 @@ func runCalories(cmd *cobra.Command, args []string) error {
 			})
 		}
 	case "table":
-		table := tablewriter.NewWriter(os.Stdout)
-		table.Header([]string{"Date", "Calories"})
+		tbl := table.New("Date", "Calories")
 		for _, data := range caloriesData {
-			table.Append([]string{
+			tbl.AddRow(
 				data.Date.Format("2006-01-02"),
 				fmt.Sprintf("%d", data.Calories),
-			})
+			)
 		}
-		table.Render()
+		tbl.Print()
 	default:
 		return fmt.Errorf("unsupported output format: %s", outputFormat)
 	}

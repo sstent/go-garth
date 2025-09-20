@@ -29,6 +29,8 @@ func TestClient_GetUserProfile(t *testing.T) {
 	u, _ := url.Parse(server.URL)
 	c, err := client.NewClient(u.Host)
 	require.NoError(t, err)
+	c.Domain = u.Host
+	require.NoError(t, err)
 	c.HTTPClient = &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{

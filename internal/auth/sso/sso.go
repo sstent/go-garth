@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"go-garth/internal/auth/oauth"
-	"go-garth/internal/types"
+	types "go-garth/internal/models/types"
 )
 
 var (
