@@ -5,11 +5,16 @@ import (
 	"fmt"
 	"time"
 
-	shared "go-garth/shared/interfaces"
 	types "go-garth/internal/models/types"
+	shared "go-garth/shared/interfaces"
 )
 
-func (d *types.DetailedSleepData) Get(day time.Time, c shared.APIClient) (interface{}, error) {
+// DetailedSleepDataWithMethods embeds types.DetailedSleepData and adds methods
+type DetailedSleepDataWithMethods struct {
+	types.DetailedSleepData
+}
+
+func (d *DetailedSleepDataWithMethods) Get(day time.Time, c shared.APIClient) (interface{}, error) {
 	dateStr := day.Format("2006-01-02")
 	path := fmt.Sprintf("/wellness-service/wellness/dailySleepData/%s?date=%s&nonSleepBufferMinutes=60",
 		c.GetUsername(), dateStr)
@@ -24,16 +29,16 @@ func (d *types.DetailedSleepData) Get(day time.Time, c shared.APIClient) (interf
 	}
 
 	var response struct {
-		DailySleepDTO            *types.DetailedSleepData `json:"dailySleepDTO"`
-		SleepMovement            []types.SleepMovement    `json:"sleepMovement"`
-		RemSleepData            bool               `json:"remSleepData"`
-		SleepLevels             []types.SleepLevel       `json:"sleepLevels"`
-		SleepRestlessMoments    []interface{}      `json:"sleepRestlessMoments"`
-		RestlessMomentsCount    int                `json:"restlessMomentsCount"`
-		WellnessSpO2SleepSummaryDTO interface{}   `json:"wellnessSpO2SleepSummaryDTO"`
-		WellnessEpochSPO2DataDTOList []interface{} `json:"wellnessEpochSPO2DataDTOList"`
-		WellnessEpochRespirationDataDTOList []interface{} `json:"wellnessEpochRespirationDataDTOList"`
-		SleepStress             interface{}        `json:"sleepStress"`
+		DailySleepDTO                       *types.DetailedSleepData `json:"dailySleepDTO"`
+		SleepMovement                       []types.SleepMovement    `json:"sleepMovement"`
+		RemSleepData                        bool                     `json:"remSleepData"`
+		SleepLevels                         []types.SleepLevel       `json:"sleepLevels"`
+		SleepRestlessMoments                []interface{}            `json:"sleepRestlessMoments"`
+		RestlessMomentsCount                int                      `json:"restlessMomentsCount"`
+		WellnessSpO2SleepSummaryDTO         interface{}              `json:"wellnessSpO2SleepSummaryDTO"`
+		WellnessEpochSPO2DataDTOList        []interface{}            `json:"wellnessEpochSPO2DataDTOList"`
+		WellnessEpochRespirationDataDTOList []interface{}            `json:"wellnessEpochRespirationDataDTOList"`
+		SleepStress                         interface{}              `json:"sleepStress"`
 	}
 
 	if err := json.Unmarshal(data, &response); err != nil {
@@ -48,11 +53,11 @@ func (d *types.DetailedSleepData) Get(day time.Time, c shared.APIClient) (interf
 	response.DailySleepDTO.SleepMovement = response.SleepMovement
 	response.DailySleepDTO.SleepLevels = response.SleepLevels
 
-	return response.DailySleepDTO, nil
+	return &DetailedSleepDataWithMethods{DetailedSleepData: *response.DailySleepDTO}, nil
 }
 
 // GetSleepEfficiency calculates sleep efficiency percentage
-func (d *types.DetailedSleepData) GetSleepEfficiency() float64 {
+func (d *DetailedSleepDataWithMethods) GetSleepEfficiency() float64 {
 	totalTime := d.SleepEndTimestampGMT.Sub(d.SleepStartTimestampGMT).Seconds()
 	sleepTime := float64(d.DeepSleepSeconds + d.LightSleepSeconds + d.RemSleepSeconds)
 	if totalTime == 0 {
@@ -62,7 +67,7 @@ func (d *types.DetailedSleepData) GetSleepEfficiency() float64 {
 }
 
 // GetTotalSleepTime returns total sleep time in hours
-func (d *types.DetailedSleepData) GetTotalSleepTime() float64 {
+func (d *DetailedSleepDataWithMethods) GetTotalSleepTime() float64 {
 	totalSeconds := d.DeepSleepSeconds + d.LightSleepSeconds + d.RemSleepSeconds
 	return float64(totalSeconds) / 3600.0
 }

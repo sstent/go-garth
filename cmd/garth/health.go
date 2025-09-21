@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"go-garth/internal/data" // Import the data package
 	types "go-garth/internal/models/types"
 	"go-garth/pkg/garmin"
 )
@@ -64,6 +65,35 @@ var (
 		Long:  `Fetch Heart Rate Zones data.`,
 		RunE:  runHRZones,
 	}
+
+	trainingStatusCmd = &cobra.Command{
+		Use:   "training-status",
+		Short: "Get Training Status data",
+		Long:  `Fetch Training Status data.`,
+		RunE:  runTrainingStatus,
+	}
+
+	trainingLoadCmd = &cobra.Command{
+		Use:   "training-load",
+		Short: "Get Training Load data",
+		Long:  `Fetch Training Load data.`,
+		RunE:  runTrainingLoad,
+	}
+
+	fitnessAgeCmd = &cobra.Command{
+		Use:   "fitness-age",
+		Short: "Get Fitness Age data",
+		Long:  `Fetch Fitness Age data.`,
+		RunE:  runFitnessAge,
+	}
+
+	wellnessCmd = &cobra.Command{
+		Use:   "wellness",
+		Short: "Get comprehensive wellness data",
+		Long:  `Fetch comprehensive wellness data including body composition and resting heart rate trends.`,
+		RunE:  runWellness,
+	}
+
 	healthDateFrom  string
 	healthDateTo    string
 	healthDays      int
@@ -92,65 +122,20 @@ func init() {
 	bodyBatteryCmd.Flags().BoolVar(&healthYesterday, "yesterday", false, "Fetch data for yesterday")
 	bodyBatteryCmd.Flags().StringVar(&healthAggregate, "aggregate", "", "Aggregate data by (day, week, month, year)")
 
-	// VO2 Max Command
-	vo2maxCmd = &cobra.Command{
-		Use:   "vo2max",
-		Short: "Get VO2 Max data",
-		Long:  `Fetch VO2 Max data for a specified date range.`,
-		RunE:  runVO2Max,
-	}
-
 	healthCmd.AddCommand(vo2maxCmd)
 	vo2maxCmd.Flags().StringVar(&healthDateFrom, "from", "", "Start date for data fetching (YYYY-MM-DD)")
 	vo2maxCmd.Flags().StringVar(&healthDateTo, "to", "", "End date for data fetching (YYYY-MM-DD)")
 	vo2maxCmd.Flags().StringVar(&healthAggregate, "aggregate", "", "Aggregate data by (day, week, month, year)")
 
-	// Heart Rate Zones Command
-	hrZonesCmd = &cobra.Command{
-		Use:   "hr-zones",
-		Short: "Get Heart Rate Zones data",
-		Long:  `Fetch Heart Rate Zones data.`,
-		RunE:  runHRZones,
-	}
-
 	healthCmd.AddCommand(hrZonesCmd)
 
-	// Training Status Command
-	trainingStatusCmd = &cobra.Command{
-		Use:   "training-status",
-		Short: "Get Training Status data",
-		Long:  `Fetch Training Status data.`,
-		RunE:  runTrainingStatus,
-	}
 	healthCmd.AddCommand(trainingStatusCmd)
 	trainingStatusCmd.Flags().StringVar(&healthDateFrom, "from", "", "Date for data fetching (YYYY-MM-DD, defaults to today)")
 
-	// Training Load Command
-	trainingLoadCmd = &cobra.Command{
-		Use:   "training-load",
-		Short: "Get Training Load data",
-		Long:  `Fetch Training Load data.`,
-		RunE:  runTrainingLoad,
-	}
 	healthCmd.AddCommand(trainingLoadCmd)
 	trainingLoadCmd.Flags().StringVar(&healthDateFrom, "from", "", "Date for data fetching (YYYY-MM-DD, defaults to today)")
 
-	// Fitness Age Command
-	fitnessAgeCmd = &cobra.Command{
-		Use:   "fitness-age",
-		Short: "Get Fitness Age data",
-		Long:  `Fetch Fitness Age data.`,
-		RunE:  runFitnessAge,
-	}
 	healthCmd.AddCommand(fitnessAgeCmd)
-
-	// Wellness Command
-	wellnessCmd = &cobra.Command{
-		Use:   "wellness",
-		Short: "Get comprehensive wellness data",
-		Long:  `Fetch comprehensive wellness data including body composition and resting heart rate trends.`,
-		RunE:  runWellness,
-	}
 
 	healthCmd.AddCommand(wellnessCmd)
 	wellnessCmd.Flags().StringVar(&healthDateFrom, "from", "", "Start date for data fetching (YYYY-MM-DD)")
@@ -188,14 +173,21 @@ func runSleep(cmd *cobra.Command, args []string) error {
 		endDate = time.Now() // Default to today
 	}
 
-	var allSleepData []*types.DetailedSleepData
+	var allSleepData []*data.DetailedSleepDataWithMethods
 	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
-		sleepData, err := garminClient.GetDetailedSleepData(d)
+		// Create a new instance of DetailedSleepDataWithMethods for each day
+		sleepDataFetcher := &data.DetailedSleepDataWithMethods{}
+		sleepData, err := sleepDataFetcher.Get(d, garminClient.InternalClient())
 		if err != nil {
 			return fmt.Errorf("failed to get sleep data for %s: %w", d.Format("2006-01-02"), err)
 		}
 		if sleepData != nil {
-			allSleepData = append(allSleepData, sleepData)
+			// Type assert the result back to DetailedSleepDataWithMethods
+			if sdm, ok := sleepData.(*data.DetailedSleepDataWithMethods); ok {
+				allSleepData = append(allSleepData, sdm)
+			} else {
+				return fmt.Errorf("unexpected type returned for sleep data: %T", sleepData)
+			}
 		}
 	}
 
@@ -227,9 +219,24 @@ func runSleep(cmd *cobra.Command, args []string) error {
 				(time.Duration(data.LightSleepSeconds) * time.Second).String(),
 				(time.Duration(data.RemSleepSeconds) * time.Second).String(),
 				(time.Duration(data.AwakeSleepSeconds) * time.Second).String(),
-				func() string { if data.AverageSpO2Value != nil { return fmt.Sprintf("%.2f", *data.AverageSpO2Value) } ; return "N/A" }(),
-				func() string { if data.LowestSpO2Value != nil { return fmt.Sprintf("%d", *data.LowestSpO2Value) } ; return "N/A" }(),
-				func() string { if data.AverageRespirationValue != nil { return fmt.Sprintf("%.2f", *data.AverageRespirationValue) } ; return "N/A" }(),
+				func() string {
+					if data.AverageSpO2Value != nil {
+						return fmt.Sprintf("%.2f", *data.AverageSpO2Value)
+					}
+					return "N/A"
+				}(),
+				func() string {
+					if data.LowestSpO2Value != nil {
+						return fmt.Sprintf("%d", *data.LowestSpO2Value)
+					}
+					return "N/A"
+				}(),
+				func() string {
+					if data.AverageRespirationValue != nil {
+						return fmt.Sprintf("%.2f", *data.AverageRespirationValue)
+					}
+					return "N/A"
+				}(),
 			})
 		}
 	case "table":
@@ -243,9 +250,24 @@ func runSleep(cmd *cobra.Command, args []string) error {
 				(time.Duration(data.LightSleepSeconds) * time.Second).String(),
 				(time.Duration(data.RemSleepSeconds) * time.Second).String(),
 				(time.Duration(data.AwakeSleepSeconds) * time.Second).String(),
-				func() string { if data.AverageSpO2Value != nil { return fmt.Sprintf("%.2f", *data.AverageSpO2Value) } ; return "N/A" }(),
-				func() string { if data.LowestSpO2Value != nil { return fmt.Sprintf("%d", *data.LowestSpO2Value) } ; return "N/A" }(),
-				func() string { if data.AverageRespirationValue != nil { return fmt.Sprintf("%.2f", *data.AverageRespirationValue) } ; return "N/A" }(),
+				func() string {
+					if data.AverageSpO2Value != nil {
+						return fmt.Sprintf("%.2f", *data.AverageSpO2Value)
+					}
+					return "N/A"
+				}(),
+				func() string {
+					if data.LowestSpO2Value != nil {
+						return fmt.Sprintf("%d", *data.LowestSpO2Value)
+					}
+					return "N/A"
+				}(),
+				func() string {
+					if data.AverageRespirationValue != nil {
+						return fmt.Sprintf("%.2f", *data.AverageRespirationValue)
+					}
+					return "N/A"
+				}(),
 			)
 		}
 		tbl.Print()
@@ -271,14 +293,19 @@ func runHrv(cmd *cobra.Command, args []string) error {
 		days = 7 // Default to 7 days if not specified
 	}
 
-	var allHrvData []*types.DailyHRVData
+	var allHrvData []*data.DailyHRVDataWithMethods
 	for d := time.Now().AddDate(0, 0, -days+1); !d.After(time.Now()); d = d.AddDate(0, 0, 1) {
-		hrvData, err := garminClient.GetDailyHRVData(d)
+		hrvDataFetcher := &data.DailyHRVDataWithMethods{}
+		hrvData, err := hrvDataFetcher.Get(d, garminClient.InternalClient())
 		if err != nil {
 			return fmt.Errorf("failed to get HRV data for %s: %w", d.Format("2006-01-02"), err)
 		}
 		if hrvData != nil {
-			allHrvData = append(allHrvData, hrvData)
+			if hdm, ok := hrvData.(*data.DailyHRVDataWithMethods); ok {
+				allHrvData = append(allHrvData, hdm)
+			} else {
+				return fmt.Errorf("unexpected type returned for HRV data: %T", hrvData)
+			}
 		}
 	}
 
@@ -304,8 +331,18 @@ func runHrv(cmd *cobra.Command, args []string) error {
 		for _, data := range allHrvData {
 			writer.Write([]string{
 				data.CalendarDate.Format("2006-01-02"),
-				func() string { if data.WeeklyAvg != nil { return fmt.Sprintf("%.2f", *data.WeeklyAvg) } ; return "N/A" }(),
-				func() string { if data.LastNightAvg != nil { return fmt.Sprintf("%.2f", *data.LastNightAvg) } ; return "N/A" }(),
+				func() string {
+					if data.WeeklyAvg != nil {
+						return fmt.Sprintf("%.2f", *data.WeeklyAvg)
+					}
+					return "N/A"
+				}(),
+				func() string {
+					if data.LastNightAvg != nil {
+						return fmt.Sprintf("%.2f", *data.LastNightAvg)
+					}
+					return "N/A"
+				}(),
 				data.Status,
 				data.FeedbackPhrase,
 			})
@@ -315,8 +352,18 @@ func runHrv(cmd *cobra.Command, args []string) error {
 		for _, data := range allHrvData {
 			tbl.AddRow(
 				data.CalendarDate.Format("2006-01-02"),
-				func() string { if data.WeeklyAvg != nil { return fmt.Sprintf("%.2f", *data.WeeklyAvg) } ; return "N/A" }(),
-				func() string { if data.LastNightAvg != nil { return fmt.Sprintf("%.2f", *data.LastNightAvg) } ; return "N/A" }(),
+				func() string {
+					if data.WeeklyAvg != nil {
+						return fmt.Sprintf("%.2f", *data.WeeklyAvg)
+					}
+					return "N/A"
+				}(),
+				func() string {
+					if data.LastNightAvg != nil {
+						return fmt.Sprintf("%.2f", *data.LastNightAvg)
+					}
+					return "N/A"
+				}(),
 				data.Status,
 				data.FeedbackPhrase,
 			)
@@ -330,13 +377,12 @@ func runHrv(cmd *cobra.Command, args []string) error {
 }
 
 func runStress(cmd *cobra.Command, args []string) error {
-	garminClient, err := garmin.NewClient("www.garmin.com") // TODO: Domain should be configurable
+	garminClient, err := garmin.NewClient(viper.GetString("domain"))
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
 	}
 
-	sessionFile := "garmin_session.json" // TODO: Make session file configurable
-	if err := garminClient.LoadSession(sessionFile); err != nil {
+	if err := garminClient.LoadSession(viper.GetString("session_file")); err != nil {
 		return fmt.Errorf("not logged in: %w", err)
 	}
 
@@ -398,7 +444,7 @@ func runStress(cmd *cobra.Command, args []string) error {
 		stressData = []types.StressData{}
 		for key, entry := range aggregatedStress {
 			stressData = append(stressData, types.StressData{
-				Date: types.ParseAggregationKey(key, healthAggregate),
+				Date:            types.ParseAggregationKey(key, healthAggregate),
 				StressLevel:     entry.StressLevel / entry.Count,
 				RestStressLevel: entry.RestStressLevel / entry.Count,
 			})
@@ -460,9 +506,14 @@ func runBodyBattery(cmd *cobra.Command, args []string) error {
 		targetDate = time.Now()
 	}
 
-	bodyBatteryData, err := garminClient.GetDetailedBodyBatteryData(targetDate)
+	bodyBatteryDataFetcher := &data.BodyBatteryDataWithMethods{}
+	result, err := bodyBatteryDataFetcher.Get(targetDate, garminClient.InternalClient())
 	if err != nil {
 		return fmt.Errorf("failed to get Body Battery data: %w", err)
+	}
+	bodyBatteryData, ok := result.(*data.BodyBatteryDataWithMethods)
+	if !ok {
+		return fmt.Errorf("unexpected type for Body Battery data: %T", result)
 	}
 
 	if bodyBatteryData == nil {
@@ -573,6 +624,7 @@ func runVO2Max(cmd *cobra.Command, args []string) error {
 			tbl.AddRow(
 				profile.Cycling.ActivityType,
 				fmt.Sprintf("%.2f", profile.Cycling.Value),
+				fmt.Sprintf("%.2f", profile.Cycling.Value),
 				profile.Cycling.Date.Format("2006-01-02"),
 				profile.Cycling.Source,
 			)
@@ -628,7 +680,7 @@ func runHRZones(cmd *cobra.Command, args []string) error {
 			})
 		}
 	case "table":
-tbl := table.New("Resting HR", "Max HR", "Lactate Threshold", "Updated At")
+		tbl := table.New("Resting HR", "Max HR", "Lactate Threshold", "Updated At")
 		tbl.AddRow(
 			strconv.Itoa(hrZonesData.RestingHR),
 			strconv.Itoa(hrZonesData.MaxHR),
@@ -656,8 +708,6 @@ tbl := table.New("Resting HR", "Max HR", "Lactate Threshold", "Updated At")
 	return nil
 }
 
-var wellnessCmd *cobra.Command
-
 func runWellness(cmd *cobra.Command, args []string) error {
 	return fmt.Errorf("not implemented")
 }
@@ -682,7 +732,8 @@ func runTrainingStatus(cmd *cobra.Command, args []string) error {
 		targetDate = time.Now()
 	}
 
-	trainingStatus, err := garminClient.GetTrainingStatus(targetDate)
+	trainingStatusFetcher := &data.TrainingStatusWithMethods{}
+	trainingStatus, err := trainingStatusFetcher.Get(targetDate, garminClient.InternalClient())
 	if err != nil {
 		return fmt.Errorf("failed to get training status: %w", err)
 	}
@@ -692,11 +743,16 @@ func runTrainingStatus(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	tsm, ok := trainingStatus.(*data.TrainingStatusWithMethods)
+	if !ok {
+		return fmt.Errorf("unexpected type returned for training status: %T", trainingStatus)
+	}
+
 	outputFormat := viper.GetString("output.format")
 
 	switch outputFormat {
 	case "json":
-		data, err := json.MarshalIndent(trainingStatus, "", "  ")
+		data, err := json.MarshalIndent(tsm, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal training status to JSON: %w", err)
 		}
@@ -707,16 +763,16 @@ func runTrainingStatus(cmd *cobra.Command, args []string) error {
 
 		writer.Write([]string{"Date", "Status", "LoadRatio"})
 		writer.Write([]string{
-			trainingStatus.CalendarDate.Format("2006-01-02"),
-			trainingStatus.TrainingStatusKey,
-			fmt.Sprintf("%.2f", trainingStatus.LoadRatio),
+			tsm.CalendarDate.Format("2006-01-02"),
+			tsm.TrainingStatusKey,
+			fmt.Sprintf("%.2f", tsm.LoadRatio),
 		})
 	case "table":
 		tbl := table.New("Date", "Status", "Load Ratio")
 		tbl.AddRow(
-			trainingStatus.CalendarDate.Format("2006-01-02"),
-			trainingStatus.TrainingStatusKey,
-			fmt.Sprintf("%.2f", trainingStatus.LoadRatio),
+			tsm.CalendarDate.Format("2006-01-02"),
+			tsm.TrainingStatusKey,
+			fmt.Sprintf("%.2f", tsm.LoadRatio),
 		)
 		tbl.Print()
 	default:
@@ -746,7 +802,8 @@ func runTrainingLoad(cmd *cobra.Command, args []string) error {
 		targetDate = time.Now()
 	}
 
-	trainingLoad, err := garminClient.GetTrainingLoad(targetDate)
+	trainingLoadFetcher := &data.TrainingLoadWithMethods{}
+	trainingLoad, err := trainingLoadFetcher.Get(targetDate, garminClient.InternalClient())
 	if err != nil {
 		return fmt.Errorf("failed to get training load: %w", err)
 	}
@@ -756,11 +813,16 @@ func runTrainingLoad(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
+	tlm, ok := trainingLoad.(*data.TrainingLoadWithMethods)
+	if !ok {
+		return fmt.Errorf("unexpected type returned for training load: %T", trainingLoad)
+	}
+
 	outputFormat := viper.GetString("output.format")
 
 	switch outputFormat {
 	case "json":
-		data, err := json.MarshalIndent(trainingLoad, "", "  ")
+		data, err := json.MarshalIndent(tlm, "", "  ")
 		if err != nil {
 			return fmt.Errorf("failed to marshal training load to JSON: %w", err)
 		}
@@ -771,18 +833,18 @@ func runTrainingLoad(cmd *cobra.Command, args []string) error {
 
 		writer.Write([]string{"Date", "AcuteLoad", "ChronicLoad", "LoadRatio"})
 		writer.Write([]string{
-			trainingLoad.CalendarDate.Format("2006-01-02"),
-			fmt.Sprintf("%.2f", trainingLoad.AcuteTrainingLoad),
-			fmt.Sprintf("%.2f", trainingLoad.ChronicTrainingLoad),
-			fmt.Sprintf("%.2f", trainingLoad.TrainingLoadRatio),
+			tlm.CalendarDate.Format("2006-01-02"),
+			fmt.Sprintf("%.2f", tlm.AcuteTrainingLoad),
+			fmt.Sprintf("%.2f", tlm.ChronicTrainingLoad),
+			fmt.Sprintf("%.2f", tlm.TrainingLoadRatio),
 		})
 	case "table":
 		tbl := table.New("Date", "Acute Load", "Chronic Load", "Load Ratio")
 		tbl.AddRow(
-			trainingLoad.CalendarDate.Format("2006-01-02"),
-			fmt.Sprintf("%.2f", trainingLoad.AcuteTrainingLoad),
-			fmt.Sprintf("%.2f", trainingLoad.ChronicTrainingLoad),
-			fmt.Sprintf("%.2f", trainingLoad.TrainingLoadRatio),
+			tlm.CalendarDate.Format("2006-01-02"),
+			fmt.Sprintf("%.2f", tlm.AcuteTrainingLoad),
+			fmt.Sprintf("%.2f", tlm.ChronicTrainingLoad),
+			fmt.Sprintf("%.2f", tlm.TrainingLoadRatio),
 		)
 		tbl.Print()
 	default:

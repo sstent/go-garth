@@ -18,6 +18,7 @@ import (
 	"go-garth/internal/errors"
 	types "go-garth/internal/models/types"
 	shared "go-garth/shared/interfaces"
+	models "go-garth/shared/models"
 )
 
 // Client represents the Garmin Connect API client
@@ -39,7 +40,7 @@ func (c *Client) GetUsername() string {
 }
 
 // GetUserSettings retrieves the current user's settings
-func (c *Client) GetUserSettings() (*types.UserSettings, error) {
+func (c *Client) GetUserSettings() (*models.UserSettings, error) {
 	scheme := "https"
 	if strings.HasPrefix(c.Domain, "127.0.0.1") {
 		scheme = "http"
@@ -91,7 +92,7 @@ func (c *Client) GetUserSettings() (*types.UserSettings, error) {
 		}
 	}
 
-	var settings types.UserSettings
+	var settings models.UserSettings
 	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
 		return nil, &errors.IOError{
 			GarthError: errors.GarthError{
@@ -786,16 +787,16 @@ func (c *Client) GetDetailedSleepData(date time.Time) (*types.DetailedSleepData,
 	}
 
 	var response struct {
-		DailySleepDTO            *types.DetailedSleepData `json:"dailySleepDTO"`
-		SleepMovement            []types.SleepMovement    `json:"sleepMovement"`
-		RemSleepData            bool               `json:"remSleepData"`
-		SleepLevels             []types.SleepLevel       `json:"sleepLevels"`
-		SleepRestlessMoments    []interface{}      `json:"sleepRestlessMoments"`
-		RestlessMomentsCount    int                `json:"restlessMomentsCount"`
-		WellnessSpO2SleepSummaryDTO interface{}   `json:"wellnessSpO2SleepSummaryDTO"`
-		WellnessEpochSPO2DataDTOList []interface{} `json:"wellnessEpochSPO2DataDTOList"`
-		WellnessEpochRespirationDataDTOList []interface{} `json:"wellnessEpochRespirationDataDTOList"`
-		SleepStress             interface{}        `json:"sleepStress"`
+		DailySleepDTO                       *types.DetailedSleepData `json:"dailySleepDTO"`
+		SleepMovement                       []types.SleepMovement    `json:"sleepMovement"`
+		RemSleepData                        bool                     `json:"remSleepData"`
+		SleepLevels                         []types.SleepLevel       `json:"sleepLevels"`
+		SleepRestlessMoments                []interface{}            `json:"sleepRestlessMoments"`
+		RestlessMomentsCount                int                      `json:"restlessMomentsCount"`
+		WellnessSpO2SleepSummaryDTO         interface{}              `json:"wellnessSpO2SleepSummaryDTO"`
+		WellnessEpochSPO2DataDTOList        []interface{}            `json:"wellnessEpochSPO2DataDTOList"`
+		WellnessEpochRespirationDataDTOList []interface{}            `json:"wellnessEpochRespirationDataDTOList"`
+		SleepStress                         interface{}              `json:"sleepStress"`
 	}
 
 	if err := json.Unmarshal(data, &response); err != nil {

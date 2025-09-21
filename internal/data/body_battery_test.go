@@ -1,8 +1,8 @@
 package data
 
 import (
+	types "go-garth/internal/models/types"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -51,72 +51,49 @@ func TestParseBodyBatteryReadings(t *testing.T) {
 	}
 }
 
-func TestParseStressReadings(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    [][]int
-		expected []StressReading
-	}{
-		{
-			name: "valid readings",
-			input: [][]int{
-				{1000, 25},
-				{2000, 30},
-				{3000, 20},
-			},
-			expected: []StressReading{
-				{1000, 25},
-				{2000, 30},
-				{3000, 20},
-			},
-		},
-		{
-			name: "invalid readings",
-			input: [][]int{
-				{1000},        // missing stress level
-				{2000, 30, 1}, // extra value
-				{},            // empty
-			},
-			expected: []StressReading{},
-		},
-		{
-			name:     "empty input",
-			input:    [][]int{},
-			expected: []StressReading{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := ParseStressReadings(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestDailyBodyBatteryStress(t *testing.T) {
-	now := time.Now()
-	d := DailyBodyBatteryStress{
-		CalendarDate: now,
-		BodyBatteryValuesArray: [][]any{
+// Test for GetCurrentLevel and GetDayChange methods
+func TestBodyBatteryDataWithMethods(t *testing.T) {
+	mockData := types.DetailedBodyBatteryData{
+		BodyBatteryValuesArray: [][]interface{}{
 			{1000, "ACTIVE", 75, 1.0},
 			{2000, "ACTIVE", 70, 1.0},
-		},
-		StressValuesArray: [][]int{
-			{1000, 25},
-			{2000, 30},
+			{3000, "REST", 65, 1.0},
 		},
 	}
 
-	t.Run("body battery readings", func(t *testing.T) {
-		readings := ParseBodyBatteryReadings(d.BodyBatteryValuesArray)
-		assert.Len(t, readings, 2)
-		assert.Equal(t, 75, readings[0].Level)
+	bb := BodyBatteryDataWithMethods{DetailedBodyBatteryData: mockData}
+
+	t.Run("GetCurrentLevel", func(t *testing.T) {
+		assert.Equal(t, 65, bb.GetCurrentLevel())
 	})
 
-	t.Run("stress readings", func(t *testing.T) {
-		readings := ParseStressReadings(d.StressValuesArray)
-		assert.Len(t, readings, 2)
-		assert.Equal(t, 25, readings[0].StressLevel)
+	t.Run("GetDayChange", func(t *testing.T) {
+		assert.Equal(t, -10, bb.GetDayChange()) // 65 - 75 = -10
+	})
+
+	// Test with empty data
+	emptyData := types.DetailedBodyBatteryData{
+		BodyBatteryValuesArray: [][]interface{}{},
+	}
+	emptyBb := BodyBatteryDataWithMethods{DetailedBodyBatteryData: emptyData}
+
+	t.Run("GetCurrentLevel empty", func(t *testing.T) {
+		assert.Equal(t, 0, emptyBb.GetCurrentLevel())
+	})
+
+	t.Run("GetDayChange empty", func(t *testing.T) {
+		assert.Equal(t, 0, emptyBb.GetDayChange())
+	})
+
+	// Test with single reading
+	singleReadingData := types.DetailedBodyBatteryData{
+		BodyBatteryValuesArray: [][]interface{}{
+			{1000, "ACTIVE", 80, 1.0},
+		},
+	}
+	singleReadingBb := BodyBatteryDataWithMethods{DetailedBodyBatteryData: singleReadingData}
+
+	t.Run("GetDayChange single reading", func(t *testing.T) {
+		assert.Equal(t, 0, singleReadingBb.GetDayChange())
 	})
 }

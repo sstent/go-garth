@@ -6,12 +6,17 @@ import (
 	"sort"
 	"time"
 
-	shared "go-garth/shared/interfaces"
 	types "go-garth/internal/models/types"
+	shared "go-garth/shared/interfaces"
 )
 
-// Update the existing get method in hrv.go
-func (h *types.DailyHRVData) Get(day time.Time, c shared.APIClient) (interface{}, error) {
+// DailyHRVDataWithMethods embeds types.DailyHRVData and adds methods
+type DailyHRVDataWithMethods struct {
+	types.DailyHRVData
+}
+
+// Get implements the Data interface for DailyHRVData
+func (h *DailyHRVDataWithMethods) Get(day time.Time, c shared.APIClient) (interface{}, error) {
 	dateStr := day.Format("2006-01-02")
 	path := fmt.Sprintf("/wellness-service/wellness/dailyHrvData/%s?date=%s",
 		c.GetUsername(), dateStr)
@@ -36,7 +41,7 @@ func (h *types.DailyHRVData) Get(day time.Time, c shared.APIClient) (interface{}
 
 	// Combine summary and readings
 	response.HRVSummary.HRVReadings = response.HRVReadings
-	return &response.HRVSummary, nil
+	return &DailyHRVDataWithMethods{DailyHRVData: response.HRVSummary}, nil
 }
 
 // ParseHRVReadings converts body battery values array to structured readings

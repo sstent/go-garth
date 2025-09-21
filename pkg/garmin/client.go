@@ -2,6 +2,8 @@ package garmin
 
 import (
 	"fmt"
+	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -10,6 +12,7 @@ import (
 	"go-garth/internal/errors"
 	types "go-garth/internal/models/types"
 	shared "go-garth/shared/interfaces"
+	models "go-garth/shared/models"
 )
 
 // Client is the main Garmin Connect client type
@@ -43,7 +46,7 @@ func (c *Client) GetUsername() string {
 }
 
 // GetUserSettings implements the APIClient interface
-func (c *Client) GetUserSettings() (*types.UserSettings, error) {
+func (c *Client) GetUserSettings() (*models.UserSettings, error) {
 	return c.Client.GetUserSettings()
 }
 
@@ -89,12 +92,12 @@ func (c *Client) ListActivities(opts ActivityOptions) ([]Activity, error) {
 	var garminActivities []Activity
 	for _, act := range internalActivities {
 		garminActivities = append(garminActivities, Activity{
-			ActivityID:   act.ActivityID,
-			ActivityName: act.ActivityName,
-			ActivityType: act.ActivityType,
+			ActivityID:     act.ActivityID,
+			ActivityName:   act.ActivityName,
+			ActivityType:   act.ActivityType,
 			StartTimeLocal: act.StartTimeLocal,
-			Distance:     act.Distance,
-			Duration:     act.Duration,
+			Distance:       act.Distance,
+			Duration:       act.Duration,
 		})
 	}
 	return garminActivities, nil
@@ -209,11 +212,6 @@ func (c *Client) GetHeartRateZones() (*types.HeartRateZones, error) {
 	return c.Client.GetHeartRateZones()
 }
 
-// GetWellnessData retrieves comprehensive wellness data for a specified date range
-func (c *Client) GetWellnessData(startDate, endDate time.Time) ([]types.WellnessData, error) {
-	return c.Client.GetWellnessData(startDate, endDate)
-}
-
 // GetTrainingStatus retrieves current training status
 func (c *Client) GetTrainingStatus(date time.Time) (*types.TrainingStatus, error) {
 	return c.Client.GetTrainingStatus(date)
@@ -226,7 +224,8 @@ func (c *Client) GetTrainingLoad(date time.Time) (*types.TrainingLoad, error) {
 
 // GetFitnessAge retrieves fitness age calculation
 func (c *Client) GetFitnessAge() (*types.FitnessAge, error) {
-	return c.Client.GetFitnessAge()
+	// TODO: Implement GetFitnessAge in internalClient.Client
+	return nil, fmt.Errorf("GetFitnessAge not implemented in internalClient.Client")
 }
 
 // OAuth1Token returns the OAuth1 token

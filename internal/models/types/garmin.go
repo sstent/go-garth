@@ -157,6 +157,14 @@ type VO2Max struct {
 	UpdatedDate  time.Time `json:"date"`
 }
 
+// VO2MaxProfile represents the current VO2 max profile from user settings
+type VO2MaxProfile struct {
+	UserProfilePK int          `json:"userProfilePk"`
+	LastUpdated   time.Time    `json:"lastUpdated"`
+	Running       *VO2MaxEntry `json:"running,omitempty"`
+	Cycling       *VO2MaxEntry `json:"cycling,omitempty"`
+}
+
 // SleepLevel represents different sleep stages
 type SleepLevel struct {
 	StartGMT      time.Time `json:"startGmt"`

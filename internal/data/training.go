@@ -5,11 +5,16 @@ import (
 	"fmt"
 	"time"
 
-	shared "go-garth/shared/interfaces"
 	types "go-garth/internal/models/types"
+	shared "go-garth/shared/interfaces"
 )
 
-func (t *types.TrainingStatus) Get(day time.Time, c shared.APIClient) (interface{}, error) {
+// TrainingStatusWithMethods embeds types.TrainingStatus and adds methods
+type TrainingStatusWithMethods struct {
+	types.TrainingStatus
+}
+
+func (t *TrainingStatusWithMethods) Get(day time.Time, c shared.APIClient) (interface{}, error) {
 	dateStr := day.Format("2006-01-02")
 	path := fmt.Sprintf("/metrics-service/metrics/trainingStatus/%s", dateStr)
 
@@ -27,10 +32,15 @@ func (t *types.TrainingStatus) Get(day time.Time, c shared.APIClient) (interface
 		return nil, fmt.Errorf("failed to parse training status: %w", err)
 	}
 
-	return &result, nil
+	return &TrainingStatusWithMethods{TrainingStatus: result}, nil
 }
 
-func (t *types.TrainingLoad) Get(day time.Time, c shared.APIClient) (interface{}, error) {
+// TrainingLoadWithMethods embeds types.TrainingLoad and adds methods
+type TrainingLoadWithMethods struct {
+	types.TrainingLoad
+}
+
+func (t *TrainingLoadWithMethods) Get(day time.Time, c shared.APIClient) (interface{}, error) {
 	dateStr := day.Format("2006-01-02")
 	endDate := day.AddDate(0, 0, 6).Format("2006-01-02") // Get week of data
 	path := fmt.Sprintf("/metrics-service/metrics/trainingLoad/%s/%s", dateStr, endDate)
@@ -53,5 +63,5 @@ func (t *types.TrainingLoad) Get(day time.Time, c shared.APIClient) (interface{}
 		return nil, nil
 	}
 
-	return &results[0], nil
+	return &TrainingLoadWithMethods{TrainingLoad: results[0]}, nil
 }

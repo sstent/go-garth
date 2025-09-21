@@ -1,10 +1,6 @@
-package client
+package models
 
 import (
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
 	"time"
 )
 
@@ -89,34 +85,4 @@ type UserSettings struct {
 	ConnectDate      *string           `json:"connectDate"`
 	SourceType       *string           `json:"sourceType"`
 	UserSleepWindows []UserSleepWindow `json:"userSleepWindows,omitempty"`
-}
-
-func (c *Client) GetUserSettings() (*UserSettings, error) {
-	settingsURL := fmt.Sprintf("https://connectapi.%s/userprofile-service/userprofile/user-settings", c.Domain)
-
-	req, err := http.NewRequest("GET", settingsURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create settings request: %w", err)
-	}
-
-	req.Header.Set("Authorization", c.AuthToken)
-	req.Header.Set("User-Agent", "com.garmin.android.apps.connectmobile")
-
-	resp, err := c.HTTPClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user settings: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("settings request failed with status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var settings UserSettings
-	if err := json.NewDecoder(resp.Body).Decode(&settings); err != nil {
-		return nil, fmt.Errorf("failed to parse settings: %w", err)
-	}
-
-	return &settings, nil
 }

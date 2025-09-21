@@ -6,13 +6,21 @@ import (
 	"sort"
 	"time"
 
-	shared "go-garth/shared/interfaces"
 	types "go-garth/internal/models/types"
+	shared "go-garth/shared/interfaces"
 )
 
+// BodyBatteryReading represents a single body battery data point
+type BodyBatteryReading struct {
+	Timestamp int     `json:"timestamp"`
+	Status    string  `json:"status"`
+	Level     int     `json:"level"`
+	Version   float64 `json:"version"`
+}
+
 // ParseBodyBatteryReadings converts body battery values array to structured readings
-func ParseBodyBatteryReadings(valuesArray [][]any) []types.BodyBatteryReading {
-	readings := make([]types.BodyBatteryReading, 0)
+func ParseBodyBatteryReadings(valuesArray [][]any) []BodyBatteryReading {
+	readings := make([]BodyBatteryReading, 0)
 	for _, values := range valuesArray {
 		if len(values) < 4 {
 			continue
@@ -27,7 +35,7 @@ func ParseBodyBatteryReadings(valuesArray [][]any) []types.BodyBatteryReading {
 			continue
 		}
 
-		readings = append(readings, types.BodyBatteryReading{
+		readings = append(readings, BodyBatteryReading{
 			Timestamp: int(timestamp),
 			Status:    status,
 			Level:     int(level),
@@ -40,7 +48,12 @@ func ParseBodyBatteryReadings(valuesArray [][]any) []types.BodyBatteryReading {
 	return readings
 }
 
-func (d *types.DetailedBodyBatteryData) Get(day time.Time, c shared.APIClient) (interface{}, error) {
+// BodyBatteryDataWithMethods embeds types.DetailedBodyBatteryData and adds methods
+type BodyBatteryDataWithMethods struct {
+	types.DetailedBodyBatteryData
+}
+
+func (d *BodyBatteryDataWithMethods) Get(day time.Time, c shared.APIClient) (interface{}, error) {
 	dateStr := day.Format("2006-01-02")
 
 	// Get main Body Battery data
@@ -72,11 +85,11 @@ func (d *types.DetailedBodyBatteryData) Get(day time.Time, c shared.APIClient) (
 		}
 	}
 
-	return &result, nil
+	return &BodyBatteryDataWithMethods{DetailedBodyBatteryData: result}, nil
 }
 
 // GetCurrentLevel returns the most recent Body Battery level
-func (d *types.DetailedBodyBatteryData) GetCurrentLevel() int {
+func (d *BodyBatteryDataWithMethods) GetCurrentLevel() int {
 	if len(d.BodyBatteryValuesArray) == 0 {
 		return 0
 	}
@@ -90,7 +103,7 @@ func (d *types.DetailedBodyBatteryData) GetCurrentLevel() int {
 }
 
 // GetDayChange returns the Body Battery change for the day
-func (d *types.DetailedBodyBatteryData) GetDayChange() int {
+func (d *BodyBatteryDataWithMethods) GetDayChange() int {
 	readings := ParseBodyBatteryReadings(d.BodyBatteryValuesArray)
 	if len(readings) < 2 {
 		return 0

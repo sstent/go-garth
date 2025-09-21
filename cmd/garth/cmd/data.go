@@ -14,15 +14,15 @@ import (
 )
 
 var (
-	dataDateStr string
-	dataDays int
+	dataDateStr    string
+	dataDays       int
 	dataOutputFile string
 )
 
 var dataCmd = &cobra.Command{
 	Use:   "data [type]",
 	Short: "Fetch various data types from Garmin Connect",
-	Long:  `Fetch data such as bodybattery, sleep, HRV, and weight from Garmin Connect.`, 
+	Long:  `Fetch data such as bodybattery, sleep, HRV, and weight from Garmin Connect.`,
 	Args:  cobra.ExactArgs(1), // Expects one argument: the data type
 	Run: func(cmd *cobra.Command, args []string) {
 		dataType := args[0]
@@ -58,11 +58,11 @@ var dataCmd = &cobra.Command{
 
 		switch dataType {
 		case "bodybattery":
-			result, err = garminClient.GetBodyBatteryData(endDate, endDate)
+			result, err = garminClient.GetBodyBatteryData(endDate)
 		case "sleep":
-			result, err = garminClient.GetSleepData(endDate, endDate)
+			result, err = garminClient.GetSleepData(endDate)
 		case "hrv":
-			result, err = garminClient.GetHrvData(dataDays)
+			result, err = garminClient.GetHrvData(endDate)
 		// case "weight":
 		// 	result, err = garminClient.GetWeight(endDate)
 		default:
