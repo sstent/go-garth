@@ -70,6 +70,7 @@ func (gt *GarminTime) UnmarshalJSON(b []byte) (err error) {
 	// If the input string does not contain 'Z', it will be parsed as local time.
 	// For consistency, we'll assume UTC if no timezone is specified.
 	layouts := []string{
+		"2006-01-02 15:04:05",   // Example: 2025-09-21 07:18:03
 		"2006-01-02T15:04:05.0", // Example: 2018-09-01T00:13:25.0
 		"2006-01-02T15:04:05",   // Example: 2018-09-01T00:13:25
 		"2006-01-02",            // Example: 2018-09-01

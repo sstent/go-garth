@@ -9,6 +9,8 @@ import (
 	"github.com/sstent/go-garth/internal/models/types"
 )
 
+// GetDailyHRVData retrieves comprehensive daily HRV data for the given date.
+// It returns nil when no HRV data is available for the specified day.
 func (c *Client) GetDailyHRVData(date time.Time) (*types.DailyHRVData, error) {
 	return getDailyHRVData(date, c.Client)
 }
@@ -41,6 +43,9 @@ func getDailyHRVData(day time.Time, client *internalClient.Client) (*types.Daily
 	return &response.HRVSummary, nil
 }
 
+// GetDetailedSleepData retrieves comprehensive sleep data for the given date,
+// including sleep stages and movement where available. It returns nil when no
+// sleep data is available for the specified day.
 func (c *Client) GetDetailedSleepData(date time.Time) (*types.DetailedSleepData, error) {
 	return getDetailedSleepData(date, c.Client)
 }

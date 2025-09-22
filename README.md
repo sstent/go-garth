@@ -1,10 +1,12 @@
 # Garmin Connect Go Client
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/sstent/go-garth/pkg/garmin.svg)](https://pkg.go.dev/github.com/sstent/go-garth/pkg/garmin)
+
 Go port of the Garth Python library for accessing Garmin Connect data. Provides full API coverage with improved performance and type safety.
 
 ## Installation
 ```bash
-go get github.com/sstent/garmin-connect/garth
+go get github.com/sstent/go-garth/pkg/garmin
 ```
 
 ## Basic Usage
@@ -14,12 +16,12 @@ package main
 import (
 	"fmt"
 	"time"
-	"garmin-connect/garth"
+	"github.com/sstent/go-garth/pkg/garmin"
 )
 
 func main() {
 	// Create client and authenticate
-	client, err := garth.NewClient("garmin.com")
+	client, err := garmin.NewClient("garmin.com")
 	if err != nil {
 		panic(err)
 	}
@@ -29,9 +31,9 @@ func main() {
 		panic(err)
 	}
 
-	// Get yesterday's body battery data
+	// Get yesterday's body battery data (detailed)
 	yesterday := time.Now().AddDate(0, 0, -1)
-	bb, err := garth.BodyBatteryData{}.Get(yesterday, client)
+	bb, err := client.GetBodyBatteryData(yesterday)
 	if err != nil {
 		panic(err)
 	}
@@ -41,16 +43,16 @@ func main() {
 	}
 
 	// Get weekly steps
-	steps := garth.NewDailySteps()
+	steps := garmin.NewDailySteps()
 	stepData, err := steps.List(time.Now(), 7, client)
 	if err != nil {
 		panic(err)
 	}
 	
 	for _, s := range stepData {
-		fmt.Printf("%s: %d steps\n", 
-			s.(garth.DailySteps).CalendarDate.Format("2006-01-02"),
-			*s.(garth.DailySteps).TotalSteps)
+		fmt.Printf("%s: %d steps\n",
+			s.(garmin.DailySteps).CalendarDate.Format("2006-01-02"),
+			*s.(garmin.DailySteps).TotalSteps)
 	}
 }
 ```
@@ -102,7 +104,7 @@ BenchmarkSleepList-8         	   50000	     35124 ns/op (7 days)
 ```
 
 ## Documentation
-Full API docs: [https://pkg.go.dev/garmin-connect/garth](https://pkg.go.dev/garmin-connect/garth)
+Full API docs: [https://pkg.go.dev/github.com/sstent/go-garth/pkg/garmin](https://pkg.go.dev/github.com/sstent/go-garth/pkg/garmin)
 
 ## CLI Tool
 Includes `cmd/garth` CLI for data export. Supports both daily and weekly stats:
