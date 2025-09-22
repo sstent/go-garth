@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sstent/go-garth/internal/api/client"
+	"github.com/sstent/go-garth/pkg/garth/client"
 	"github.com/sstent/go-garth/internal/utils"
 )
 

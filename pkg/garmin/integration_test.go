@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sstent/go-garth/internal/api/client"
+	"github.com/sstent/go-garth/pkg/garth/client"
 	"github.com/sstent/go-garth/internal/data"
 	"github.com/sstent/go-garth/internal/stats"
 )

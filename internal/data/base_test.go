@@ -5,7 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sstent/go-garth/internal/api/client"
+	"github.com/sstent/go-garth/pkg/garth/client"
+	interfaces "github.com/sstent/go-garth/shared/interfaces"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -28,7 +29,7 @@ func (mc *MockClient) Get(endpoint string) (interface{}, error) {
 func TestBaseData_List(t *testing.T) {
 	// Setup mock data type
 	mockData := &MockData{}
-	mockData.GetFunc = func(day time.Time, c *client.Client) (interface{}, error) {
+	mockData.GetFunc = func(day time.Time, c interfaces.APIClient) (interface{}, error) {
 		return "data for " + day.Format("2006-01-02"), nil
 	}
 
@@ -51,7 +52,7 @@ func TestBaseData_List(t *testing.T) {
 func TestBaseData_List_ErrorHandling(t *testing.T) {
 	// Setup mock data type that returns error on specific date
 	mockData := &MockData{}
-	mockData.GetFunc = func(day time.Time, c *client.Client) (interface{}, error) {
+	mockData.GetFunc = func(day time.Time, c interfaces.APIClient) (interface{}, error) {
 		if day.Day() == 13 {
 			return nil, errors.New("bad luck day")
 		}

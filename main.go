@@ -5,9 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/sstent/go-garth/internal/api/client"
-	"github.com/sstent/go-garth/internal/auth/credentials"
-	types "github.com/sstent/go-garth/pkg/garmin"
+	garmin "github.com/sstent/go-garth/pkg/garmin"
+	credentials "github.com/sstent/go-garth/pkg/garth/auth/credentials"
 )
 
 func main() {
@@ -18,7 +17,7 @@ func main() {
 	}
 
 	// Create client
-	garminClient, err := client.NewClient(domain)
+	garminClient, err := garmin.NewClient(domain)
 	if err != nil {
 		log.Fatalf("Failed to create client: %v", err)
 	}
@@ -41,7 +40,8 @@ func main() {
 	}
 
 	// Test getting activities
-	activities, err := garminClient.GetActivities(5)
+	opts := garmin.ActivityOptions{Limit: 5}
+	activities, err := garminClient.ListActivities(opts)
 	if err != nil {
 		log.Fatalf("Failed to get activities: %v", err)
 	}
@@ -50,7 +50,7 @@ func main() {
 	displayActivities(activities)
 }
 
-func displayActivities(activities []types.Activity) {
+func displayActivities(activities []garmin.Activity) {
 	fmt.Printf("\n=== Recent Activities ===\n")
 	for i, activity := range activities {
 		fmt.Printf("%d. %s\n", i+1, activity.ActivityName)

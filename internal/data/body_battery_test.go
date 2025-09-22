@@ -1,9 +1,9 @@
 package data
 
 import (
-	types "github.com/sstent/go-garth/internal/models/types"
 	"testing"
 
+	garth "github.com/sstent/go-garth/pkg/garth/types"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -53,7 +53,7 @@ func TestParseBodyBatteryReadings(t *testing.T) {
 
 // Test for GetCurrentLevel and GetDayChange methods
 func TestBodyBatteryDataWithMethods(t *testing.T) {
-	mockData := types.DetailedBodyBatteryData{
+	mockData := garth.DetailedBodyBatteryData{
 		BodyBatteryValuesArray: [][]interface{}{
 			{1000, "ACTIVE", 75, 1.0},
 			{2000, "ACTIVE", 70, 1.0},
@@ -72,7 +72,7 @@ func TestBodyBatteryDataWithMethods(t *testing.T) {
 	})
 
 	// Test with empty data
-	emptyData := types.DetailedBodyBatteryData{
+	emptyData := garth.DetailedBodyBatteryData{
 		BodyBatteryValuesArray: [][]interface{}{},
 	}
 	emptyBb := BodyBatteryDataWithMethods{DetailedBodyBatteryData: emptyData}
@@ -86,7 +86,7 @@ func TestBodyBatteryDataWithMethods(t *testing.T) {
 	})
 
 	// Test with single reading
-	singleReadingData := types.DetailedBodyBatteryData{
+	singleReadingData := garth.DetailedBodyBatteryData{
 		BodyBatteryValuesArray: [][]interface{}{
 			{1000, "ACTIVE", 80, 1.0},
 		},

@@ -1,90 +1,99 @@
 package garmin
 
-import types "github.com/sstent/go-garth/internal/models/types"
+import garth "github.com/sstent/go-garth/pkg/garth/types"
 
 // GarminTime represents Garmin's timestamp format with custom JSON parsing
-type GarminTime = types.GarminTime
+type GarminTime = garth.GarminTime
 
 // SessionData represents saved session information
-type SessionData = types.SessionData
+type SessionData = garth.SessionData
 
 // ActivityType represents the type of activity
-type ActivityType = types.ActivityType
+type ActivityType = garth.ActivityType
 
 // EventType represents the event type of an activity
-type EventType = types.EventType
+type EventType = garth.EventType
 
 // Activity represents a Garmin Connect activity
-type Activity = types.Activity
+type Activity = garth.Activity
 
 // UserProfile represents a Garmin user profile
-type UserProfile = types.UserProfile
+type UserProfile = garth.UserProfile
 
 // OAuth1Token represents OAuth1 token response
-type OAuth1Token = types.OAuth1Token
+type OAuth1Token = garth.OAuth1Token
 
 // OAuth2Token represents OAuth2 token response
-type OAuth2Token = types.OAuth2Token
+type OAuth2Token = garth.OAuth2Token
 
 // DetailedSleepData represents comprehensive sleep data
-type DetailedSleepData = types.DetailedSleepData
+type DetailedSleepData = garth.DetailedSleepData
 
 // SleepLevel represents different sleep stages
-type SleepLevel = types.SleepLevel
+type SleepLevel = garth.SleepLevel
 
 // SleepMovement represents movement during sleep
-type SleepMovement = types.SleepMovement
+type SleepMovement = garth.SleepMovement
 
 // SleepScore represents detailed sleep scoring
-type SleepScore = types.SleepScore
+type SleepScore = garth.SleepScore
 
 // SleepScoreBreakdown represents breakdown of sleep score
-type SleepScoreBreakdown = types.SleepScoreBreakdown
+type SleepScoreBreakdown = garth.SleepScoreBreakdown
 
 // HRVBaseline represents HRV baseline data
-type HRVBaseline = types.HRVBaseline
+type HRVBaseline = garth.HRVBaseline
 
 // DailyHRVData represents comprehensive daily HRV data
-type DailyHRVData = types.DailyHRVData
+type DailyHRVData = garth.DailyHRVData
 
 // BodyBatteryEvent represents events that impact Body Battery
-type BodyBatteryEvent = types.BodyBatteryEvent
+type BodyBatteryEvent = garth.BodyBatteryEvent
 
 // DetailedBodyBatteryData represents comprehensive Body Battery data
-type DetailedBodyBatteryData = types.DetailedBodyBatteryData
+type DetailedBodyBatteryData = garth.DetailedBodyBatteryData
 
 // TrainingStatus represents current training status
-type TrainingStatus = types.TrainingStatus
+type TrainingStatus = garth.TrainingStatus
 
 // TrainingLoad represents training load data
-type TrainingLoad = types.TrainingLoad
+type TrainingLoad = garth.TrainingLoad
 
 // FitnessAge represents fitness age calculation
-type FitnessAge = types.FitnessAge
+type FitnessAge = garth.FitnessAge
 
 // VO2MaxData represents VO2 max data
-type VO2MaxData = types.VO2MaxData
+type VO2MaxData = garth.VO2MaxData
 
 // VO2MaxEntry represents a single VO2 max entry
-type VO2MaxEntry = types.VO2MaxEntry
+type VO2MaxEntry = garth.VO2MaxEntry
 
 // HeartRateZones represents heart rate zone data
-type HeartRateZones = types.HeartRateZones
+type HeartRateZones = garth.HeartRateZones
 
 // HRZone represents a single heart rate zone
-type HRZone = types.HRZone
+type HRZone = garth.HRZone
 
 // WellnessData represents additional wellness metrics
-type WellnessData = types.WellnessData
+type WellnessData = garth.WellnessData
 
 // SleepData represents sleep summary data
-type SleepData = types.SleepData
+type SleepData = garth.SleepData
 
 // HrvData represents Heart Rate Variability data
-type HrvData = types.HrvData
+type HrvData = garth.HrvData
 
 // StressData represents stress level data
-type StressData = types.StressData
+type StressData = garth.StressData
 
 // BodyBatteryData represents Body Battery data
-type BodyBatteryData = types.BodyBatteryData
+type BodyBatteryData = garth.BodyBatteryData
+
+// StepsData represents steps statistics
+type StepsData = garth.StepsData
+
+// DistanceData represents distance statistics
+type DistanceData = garth.DistanceData
+
+// CaloriesData represents calories statistics
+type CaloriesData = garth.CaloriesData

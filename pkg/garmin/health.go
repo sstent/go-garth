@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	internalClient "github.com/sstent/go-garth/internal/api/client"
+	internalClient "github.com/sstent/go-garth/pkg/garth/client"
 	"github.com/sstent/go-garth/internal/models/types"
 )
 

@@ -5,17 +5,17 @@ import (
 	"fmt"
 	"time"
 
+	garth "github.com/sstent/go-garth/pkg/garth/types"
 	shared "github.com/sstent/go-garth/shared/interfaces"
-	types "github.com/sstent/go-garth/internal/models/types"
 )
 
 // DailySleepDTO represents daily sleep data
 type DailySleepDTO struct {
-	UserProfilePK          int         `json:"userProfilePk"`
-	CalendarDate           time.Time   `json:"calendarDate"`
-	SleepStartTimestampGMT time.Time   `json:"sleepStartTimestampGmt"`
-	SleepEndTimestampGMT   time.Time   `json:"sleepEndTimestampGmt"`
-	SleepScores            types.SleepScore `json:"sleepScores"` // Using types.SleepScore
+	UserProfilePK          int              `json:"userProfilePk"`
+	CalendarDate           time.Time        `json:"calendarDate"`
+	SleepStartTimestampGMT time.Time        `json:"sleepStartTimestampGmt"`
+	SleepEndTimestampGMT   time.Time        `json:"sleepEndTimestampGmt"`
+	SleepScores            garth.SleepScore `json:"sleepScores"` // Using garth.SleepScore
 	shared.BaseData
 }
 
@@ -35,8 +35,8 @@ func (d *DailySleepDTO) Get(day time.Time, c shared.APIClient) (any, error) {
 	}
 
 	var response struct {
-		DailySleepDTO *DailySleepDTO  `json:"dailySleepDto"`
-		SleepMovement []types.SleepMovement `json:"sleepMovement"` // Using types.SleepMovement
+		DailySleepDTO *DailySleepDTO        `json:"dailySleepDto"`
+		SleepMovement []garth.SleepMovement `json:"sleepMovement"` // Using garth.SleepMovement
 	}
 	if err := json.Unmarshal(data, &response); err != nil {
 		return nil, err

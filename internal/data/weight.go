@@ -74,7 +74,7 @@ func (w *WeightDataWithMethods) Get(day time.Time, c shared.APIClient) (any, err
 
 // List implements the Data interface for concurrent fetching
 func (w *WeightDataWithMethods) List(end time.Time, days int, c shared.APIClient, maxWorkers int) ([]any, error) {
-	// BaseData is not part of types.WeightData, so this line needs to be removed or re-evaluated.
+	// BaseData is not part of garth.WeightData, so this line needs to be removed or re-evaluated.
 	// For now, I will return an empty slice and no error, as this function is not directly related to the task.
 	return []any{}, nil
 }

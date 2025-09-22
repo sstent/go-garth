@@ -6,13 +6,13 @@ import (
 	"sort"
 	"time"
 
-	types "github.com/sstent/go-garth/internal/models/types"
+	garth "github.com/sstent/go-garth/pkg/garth/types"
 	shared "github.com/sstent/go-garth/shared/interfaces"
 )
 
-// DailyHRVDataWithMethods embeds types.DailyHRVData and adds methods
+// DailyHRVDataWithMethods embeds garth.DailyHRVData and adds methods
 type DailyHRVDataWithMethods struct {
-	types.DailyHRVData
+	garth.DailyHRVData
 }
 
 // Get implements the Data interface for DailyHRVData
@@ -31,8 +31,8 @@ func (h *DailyHRVDataWithMethods) Get(day time.Time, c shared.APIClient) (interf
 	}
 
 	var response struct {
-		HRVSummary  types.DailyHRVData `json:"hrvSummary"`
-		HRVReadings []types.HRVReading `json:"hrvReadings"`
+		HRVSummary  garth.DailyHRVData `json:"hrvSummary"`
+		HRVReadings []garth.HRVReading `json:"hrvReadings"`
 	}
 
 	if err := json.Unmarshal(data, &response); err != nil {
@@ -45,8 +45,8 @@ func (h *DailyHRVDataWithMethods) Get(day time.Time, c shared.APIClient) (interf
 }
 
 // ParseHRVReadings converts body battery values array to structured readings
-func ParseHRVReadings(valuesArray [][]any) []types.HRVReading {
-	readings := make([]types.HRVReading, 0, len(valuesArray))
+func ParseHRVReadings(valuesArray [][]any) []garth.HRVReading {
+	readings := make([]garth.HRVReading, 0, len(valuesArray))
 	for _, values := range valuesArray {
 		if len(values) < 6 {
 			continue
@@ -60,7 +60,7 @@ func ParseHRVReadings(valuesArray [][]any) []types.HRVReading {
 		status, _ := values[4].(string)
 		signalQuality, _ := values[5].(float64)
 
-		readings = append(readings, types.HRVReading{
+		readings = append(readings, garth.HRVReading{
 			Timestamp:     timestamp,
 			StressLevel:   stressLevel,
 			HeartRate:     heartRate,

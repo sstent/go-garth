@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	types "github.com/sstent/go-garth/internal/models/types"
+	garth "github.com/sstent/go-garth/pkg/garth/types"
 	"github.com/sstent/go-garth/shared/interfaces"
 	"github.com/sstent/go-garth/shared/models"
 
@@ -27,13 +27,13 @@ func TestVO2MaxData_Get(t *testing.T) {
 
 	// Mock the get function
 	vo2Data.GetFunc = func(day time.Time, c interfaces.APIClient) (interface{}, error) {
-		vo2Profile := &types.VO2MaxProfile{
+		vo2Profile := &garth.VO2MaxProfile{
 			UserProfilePK: settings.ID,
 			LastUpdated:   time.Now(),
 		}
 
 		if settings.UserData.VO2MaxRunning != nil && *settings.UserData.VO2MaxRunning > 0 {
-			vo2Profile.Running = &types.VO2MaxEntry{
+			vo2Profile.Running = &garth.VO2MaxEntry{
 				Value:        *settings.UserData.VO2MaxRunning,
 				ActivityType: "running",
 				Date:         day,
@@ -42,7 +42,7 @@ func TestVO2MaxData_Get(t *testing.T) {
 		}
 
 		if settings.UserData.VO2MaxCycling != nil && *settings.UserData.VO2MaxCycling > 0 {
-			vo2Profile.Cycling = &types.VO2MaxEntry{
+			vo2Profile.Cycling = &garth.VO2MaxEntry{
 				Value:        *settings.UserData.VO2MaxCycling,
 				ActivityType: "cycling",
 				Date:         day,
@@ -59,7 +59,7 @@ func TestVO2MaxData_Get(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
-	profile, ok := result.(*types.VO2MaxProfile)
+	profile, ok := result.(*garth.VO2MaxProfile)
 	assert.True(t, ok)
 	assert.Equal(t, 12345, profile.UserProfilePK)
 	assert.NotNil(t, profile.Running)

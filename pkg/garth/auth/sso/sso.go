@@ -1,4 +1,4 @@
-package sso
+package auth
 
 import (
 	"fmt"
@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sstent/go-garth/internal/auth/oauth"
-	garth "github.com/sstent/go-garth/pkg/garth/types"
+	oauth "github.com/sstent/go-garth/pkg/garth/auth/oauth"
+	types "github.com/sstent/go-garth/pkg/garth/types"
 )
 
 var (
@@ -41,7 +41,7 @@ func NewClient(domain string) *Client {
 }
 
 // Login performs the SSO authentication flow
-func (c *Client) Login(email, password string) (*garth.OAuth2Token, *MFAContext, error) {
+func (c *Client) Login(email, password string) (*types.OAuth2Token, *MFAContext, error) {
 	fmt.Printf("Logging in to Garmin Connect (%s) using SSO flow...\n", c.Domain)
 
 	scheme := "https"
@@ -185,7 +185,7 @@ func (c *Client) Login(email, password string) (*garth.OAuth2Token, *MFAContext,
 }
 
 // ResumeLogin completes authentication after MFA challenge
-func (c *Client) ResumeLogin(mfaCode string, ctx *MFAContext) (*garth.OAuth2Token, error) {
+func (c *Client) ResumeLogin(mfaCode string, ctx *MFAContext) (*types.OAuth2Token, error) {
 	fmt.Println("Resuming login with MFA code...")
 
 	// Submit MFA form

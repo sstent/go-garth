@@ -8,9 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
-	internalClient "github.com/sstent/go-garth/internal/api/client"
+	internalClient "github.com/sstent/go-garth/pkg/garth/client"
 	"github.com/sstent/go-garth/internal/errors"
-	types "github.com/sstent/go-garth/internal/models/types"
 	shared "github.com/sstent/go-garth/shared/interfaces"
 	models "github.com/sstent/go-garth/shared/models"
 )
@@ -51,12 +50,12 @@ func (c *Client) GetUserSettings() (*models.UserSettings, error) {
 }
 
 // GetUserProfile implements the APIClient interface
-func (c *Client) GetUserProfile() (*types.UserProfile, error) {
+func (c *Client) GetUserProfile() (*UserProfile, error) {
 	return c.Client.GetUserProfile()
 }
 
 // GetWellnessData implements the APIClient interface
-func (c *Client) GetWellnessData(startDate, endDate time.Time) ([]types.WellnessData, error) {
+func (c *Client) GetWellnessData(startDate, endDate time.Time) ([]WellnessData, error) {
 	return c.Client.GetWellnessData(startDate, endDate)
 }
 
@@ -168,72 +167,72 @@ func (c *Client) SearchActivities(query string) ([]Activity, error) {
 }
 
 // GetSleepData retrieves sleep data for a specified date range
-func (c *Client) GetSleepData(date time.Time) (*types.DetailedSleepData, error) {
+func (c *Client) GetSleepData(date time.Time) (*DetailedSleepData, error) {
 	return c.Client.GetDetailedSleepData(date)
 }
 
 // GetHrvData retrieves HRV data for a specified number of days
-func (c *Client) GetHrvData(date time.Time) (*types.DailyHRVData, error) {
+func (c *Client) GetHrvData(date time.Time) (*DailyHRVData, error) {
 	return c.Client.GetDailyHRVData(date)
 }
 
 // GetStressData retrieves stress data
-func (c *Client) GetStressData(startDate, endDate time.Time) ([]types.StressData, error) {
+func (c *Client) GetStressData(startDate, endDate time.Time) ([]StressData, error) {
 	return c.Client.GetStressData(startDate, endDate)
 }
 
 // GetBodyBatteryData retrieves Body Battery data
-func (c *Client) GetBodyBatteryData(date time.Time) (*types.DetailedBodyBatteryData, error) {
+func (c *Client) GetBodyBatteryData(date time.Time) (*DetailedBodyBatteryData, error) {
 	return c.Client.GetDetailedBodyBatteryData(date)
 }
 
 // GetStepsData retrieves steps data for a specified date range
-func (c *Client) GetStepsData(startDate, endDate time.Time) ([]types.StepsData, error) {
+func (c *Client) GetStepsData(startDate, endDate time.Time) ([]StepsData, error) {
 	return c.Client.GetStepsData(startDate, endDate)
 }
 
 // GetDistanceData retrieves distance data for a specified date range
-func (c *Client) GetDistanceData(startDate, endDate time.Time) ([]types.DistanceData, error) {
+func (c *Client) GetDistanceData(startDate, endDate time.Time) ([]DistanceData, error) {
 	return c.Client.GetDistanceData(startDate, endDate)
 }
 
 // GetCaloriesData retrieves calories data for a specified date range
-func (c *Client) GetCaloriesData(startDate, endDate time.Time) ([]types.CaloriesData, error) {
+func (c *Client) GetCaloriesData(startDate, endDate time.Time) ([]CaloriesData, error) {
 	return c.Client.GetCaloriesData(startDate, endDate)
 }
 
 // GetVO2MaxData retrieves VO2 max data for a specified date range
-func (c *Client) GetVO2MaxData(startDate, endDate time.Time) ([]types.VO2MaxData, error) {
+func (c *Client) GetVO2MaxData(startDate, endDate time.Time) ([]VO2MaxData, error) {
 	return c.Client.GetVO2MaxData(startDate, endDate)
 }
 
 // GetHeartRateZones retrieves heart rate zone data
-func (c *Client) GetHeartRateZones() (*types.HeartRateZones, error) {
+func (c *Client) GetHeartRateZones() (*HeartRateZones, error) {
 	return c.Client.GetHeartRateZones()
 }
 
 // GetTrainingStatus retrieves current training status
-func (c *Client) GetTrainingStatus(date time.Time) (*types.TrainingStatus, error) {
+func (c *Client) GetTrainingStatus(date time.Time) (*TrainingStatus, error) {
 	return c.Client.GetTrainingStatus(date)
 }
 
 // GetTrainingLoad retrieves training load data
-func (c *Client) GetTrainingLoad(date time.Time) (*types.TrainingLoad, error) {
+func (c *Client) GetTrainingLoad(date time.Time) (*TrainingLoad, error) {
 	return c.Client.GetTrainingLoad(date)
 }
 
 // GetFitnessAge retrieves fitness age calculation
-func (c *Client) GetFitnessAge() (*types.FitnessAge, error) {
+func (c *Client) GetFitnessAge() (*FitnessAge, error) {
 	// TODO: Implement GetFitnessAge in internalClient.Client
 	return nil, fmt.Errorf("GetFitnessAge not implemented in internalClient.Client")
 }
 
 // OAuth1Token returns the OAuth1 token
-func (c *Client) OAuth1Token() *types.OAuth1Token {
+func (c *Client) OAuth1Token() *OAuth1Token {
 	return c.Client.OAuth1Token
 }
 
 // OAuth2Token returns the OAuth2 token
-func (c *Client) OAuth2Token() *types.OAuth2Token {
+func (c *Client) OAuth2Token() *OAuth2Token {
 	return c.Client.OAuth2Token
 }

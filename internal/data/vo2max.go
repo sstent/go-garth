@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	garth "github.com/sstent/go-garth/pkg/garth/types"
 	shared "github.com/sstent/go-garth/shared/interfaces"
-	types "github.com/sstent/go-garth/internal/models/types"
 )
 
 // VO2MaxData implements the Data interface for VO2 max retrieval
@@ -29,14 +29,14 @@ func (v *VO2MaxData) get(day time.Time, c shared.APIClient) (interface{}, error)
 	}
 
 	// Extract VO2 max data from user settings
-	vo2Profile := &types.VO2MaxProfile{
+	vo2Profile := &garth.VO2MaxProfile{
 		UserProfilePK: settings.ID,
 		LastUpdated:   time.Now(),
 	}
 
 	// Add running VO2 max if available
 	if settings.UserData.VO2MaxRunning != nil && *settings.UserData.VO2MaxRunning > 0 {
-		vo2Profile.Running = &types.VO2MaxEntry{
+		vo2Profile.Running = &garth.VO2MaxEntry{
 			Value:        *settings.UserData.VO2MaxRunning,
 			ActivityType: "running",
 			Date:         day,
@@ -46,7 +46,7 @@ func (v *VO2MaxData) get(day time.Time, c shared.APIClient) (interface{}, error)
 
 	// Add cycling VO2 max if available
 	if settings.UserData.VO2MaxCycling != nil && *settings.UserData.VO2MaxCycling > 0 {
-		vo2Profile.Cycling = &types.VO2MaxEntry{
+		vo2Profile.Cycling = &garth.VO2MaxEntry{
 			Value:        *settings.UserData.VO2MaxCycling,
 			ActivityType: "cycling",
 			Date:         day,
@@ -77,14 +77,14 @@ func (v *VO2MaxData) List(end time.Time, days int, c shared.APIClient, maxWorker
 }
 
 // GetCurrentVO2Max is a convenience method to get current VO2 max values
-func GetCurrentVO2Max(c shared.APIClient) (*types.VO2MaxProfile, error) {
+func GetCurrentVO2Max(c shared.APIClient) (*garth.VO2MaxProfile, error) {
 	vo2Data := NewVO2MaxData()
 	result, err := vo2Data.get(time.Now(), c)
 	if err != nil {
 		return nil, err
 	}
 
-	vo2Profile, ok := result.(*types.VO2MaxProfile)
+	vo2Profile, ok := result.(*garth.VO2MaxProfile)
 	if !ok {
 		return nil, fmt.Errorf("unexpected result type")
 	}

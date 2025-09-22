@@ -1,10 +1,9 @@
-package client_test
+package client
 
 import (
 	"testing"
 
-	"github.com/sstent/go-garth/internal/api/client"
-	"github.com/sstent/go-garth/internal/auth/credentials"
+	credentials "github.com/sstent/go-garth/pkg/garth/auth/credentials"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -20,7 +19,7 @@ func TestClient_Login_Functional(t *testing.T) {
 	require.NoError(t, err, "Failed to load credentials from .env file. Please ensure GARMIN_EMAIL, GARMIN_PASSWORD, and GARMIN_DOMAIN are set.")
 
 	// Create client
-	c, err := client.NewClient(domain)
+	c, err := NewClient(domain)
 	require.NoError(t, err, "Failed to create client")
 
 	// Perform login

@@ -8,11 +8,10 @@ import (
 	"time"
 
 	"github.com/sstent/go-garth/internal/testutils"
+	"github.com/sstent/go-garth/pkg/garth/client"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/sstent/go-garth/internal/api/client"
 )
 
 func TestClient_GetUserProfile(t *testing.T) {

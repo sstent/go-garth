@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"time"
 
-	types "github.com/sstent/go-garth/internal/models/types"
+	garth "github.com/sstent/go-garth/pkg/garth/types"
 	"github.com/sstent/go-garth/shared/models"
 )
 
@@ -14,6 +14,6 @@ type APIClient interface {
 	ConnectAPI(path string, method string, params url.Values, body io.Reader) ([]byte, error)
 	GetUsername() string
 	GetUserSettings() (*models.UserSettings, error)
-	GetUserProfile() (*types.UserProfile, error)
-	GetWellnessData(startDate, endDate time.Time) ([]types.WellnessData, error)
+	GetUserProfile() (*garth.UserProfile, error)
+	GetWellnessData(startDate, endDate time.Time) ([]garth.WellnessData, error)
 }

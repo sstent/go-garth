@@ -16,7 +16,7 @@ import (
 
 	"github.com/sstent/go-garth/internal/auth/sso"
 	"github.com/sstent/go-garth/internal/errors"
-	types "github.com/sstent/go-garth/internal/models/types"
+	garth "github.com/sstent/go-garth/pkg/garth/types"
 	shared "github.com/sstent/go-garth/shared/interfaces"
 	models "github.com/sstent/go-garth/shared/models"
 )
@@ -27,8 +27,8 @@ type Client struct {
 	HTTPClient  *http.Client
 	Username    string
 	AuthToken   string
-	OAuth1Token *types.OAuth1Token
-	OAuth2Token *types.OAuth2Token
+	OAuth1Token *garth.OAuth1Token
+	OAuth2Token *garth.OAuth2Token
 }
 
 // Verify that Client implements shared.APIClient
@@ -216,7 +216,7 @@ func (c *Client) Logout() error {
 }
 
 // GetUserProfile retrieves the current user's full profile
-func (c *Client) GetUserProfile() (*types.UserProfile, error) {
+func (c *Client) GetUserProfile() (*garth.UserProfile, error) {
 	scheme := "https"
 	if strings.HasPrefix(c.Domain, "127.0.0.1") {
 		scheme = "http"
@@ -268,7 +268,7 @@ func (c *Client) GetUserProfile() (*types.UserProfile, error) {
 		}
 	}
 
-	var profile types.UserProfile
+	var profile garth.UserProfile
 	if err := json.NewDecoder(resp.Body).Decode(&profile); err != nil {
 		return nil, &errors.IOError{
 			GarthError: errors.GarthError{
@@ -437,7 +437,7 @@ func (c *Client) Download(activityID string, format string, filePath string) err
 }
 
 // GetActivities retrieves recent activities
-func (c *Client) GetActivities(limit int) ([]types.Activity, error) {
+func (c *Client) GetActivities(limit int) ([]garth.Activity, error) {
 	if limit <= 0 {
 		limit = 10
 	}
@@ -490,7 +490,7 @@ func (c *Client) GetActivities(limit int) ([]types.Activity, error) {
 		}
 	}
 
-	var activities []types.Activity
+	var activities []garth.Activity
 	if err := json.NewDecoder(resp.Body).Decode(&activities); err != nil {
 		return nil, &errors.IOError{
 			GarthError: errors.GarthError{
@@ -503,49 +503,49 @@ func (c *Client) GetActivities(limit int) ([]types.Activity, error) {
 	return activities, nil
 }
 
-func (c *Client) GetSleepData(startDate, endDate time.Time) ([]types.SleepData, error) {
+func (c *Client) GetSleepData(startDate, endDate time.Time) ([]garth.SleepData, error) {
 	// TODO: Implement GetSleepData
 	return nil, fmt.Errorf("GetSleepData not implemented")
 }
 
 // GetHrvData retrieves HRV data for a specified number of days
-func (c *Client) GetHrvData(days int) ([]types.HrvData, error) {
+func (c *Client) GetHrvData(days int) ([]garth.HrvData, error) {
 	// TODO: Implement GetHrvData
 	return nil, fmt.Errorf("GetHrvData not implemented")
 }
 
 // GetStressData retrieves stress data
-func (c *Client) GetStressData(startDate, endDate time.Time) ([]types.StressData, error) {
+func (c *Client) GetStressData(startDate, endDate time.Time) ([]garth.StressData, error) {
 	// TODO: Implement GetStressData
 	return nil, fmt.Errorf("GetStressData not implemented")
 }
 
 // GetBodyBatteryData retrieves Body Battery data
-func (c *Client) GetBodyBatteryData(startDate, endDate time.Time) ([]types.BodyBatteryData, error) {
+func (c *Client) GetBodyBatteryData(startDate, endDate time.Time) ([]garth.BodyBatteryData, error) {
 	// TODO: Implement GetBodyBatteryData
 	return nil, fmt.Errorf("GetBodyBatteryData not implemented")
 }
 
 // GetStepsData retrieves steps data for a specified date range
-func (c *Client) GetStepsData(startDate, endDate time.Time) ([]types.StepsData, error) {
+func (c *Client) GetStepsData(startDate, endDate time.Time) ([]garth.StepsData, error) {
 	// TODO: Implement GetStepsData
 	return nil, fmt.Errorf("GetStepsData not implemented")
 }
 
 // GetDistanceData retrieves distance data for a specified date range
-func (c *Client) GetDistanceData(startDate, endDate time.Time) ([]types.DistanceData, error) {
+func (c *Client) GetDistanceData(startDate, endDate time.Time) ([]garth.DistanceData, error) {
 	// TODO: Implement GetDistanceData
 	return nil, fmt.Errorf("GetDistanceData not implemented")
 }
 
 // GetCaloriesData retrieves calories data for a specified date range
-func (c *Client) GetCaloriesData(startDate, endDate time.Time) ([]types.CaloriesData, error) {
+func (c *Client) GetCaloriesData(startDate, endDate time.Time) ([]garth.CaloriesData, error) {
 	// TODO: Implement GetCaloriesData
 	return nil, fmt.Errorf("GetCaloriesData not implemented")
 }
 
 // GetVO2MaxData retrieves VO2 max data using the modern approach via user settings
-func (c *Client) GetVO2MaxData(startDate, endDate time.Time) ([]types.VO2MaxData, error) {
+func (c *Client) GetVO2MaxData(startDate, endDate time.Time) ([]garth.VO2MaxData, error) {
 	// Get user settings which contains current VO2 max values
 	settings, err := c.GetUserSettings()
 	if err != nil {
@@ -553,10 +553,10 @@ func (c *Client) GetVO2MaxData(startDate, endDate time.Time) ([]types.VO2MaxData
 	}
 
 	// Create VO2MaxData for the date range
-	var results []types.VO2MaxData
+	var results []garth.VO2MaxData
 	current := startDate
 	for !current.After(endDate) {
-		vo2Data := types.VO2MaxData{
+		vo2Data := garth.VO2MaxData{
 			Date:          current,
 			UserProfilePK: settings.ID,
 		}
@@ -577,20 +577,20 @@ func (c *Client) GetVO2MaxData(startDate, endDate time.Time) ([]types.VO2MaxData
 }
 
 // GetCurrentVO2Max retrieves the current VO2 max values from user profile
-func (c *Client) GetCurrentVO2Max() (*types.VO2MaxProfile, error) {
+func (c *Client) GetCurrentVO2Max() (*garth.VO2MaxProfile, error) {
 	settings, err := c.GetUserSettings()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user settings: %w", err)
 	}
 
-	profile := &types.VO2MaxProfile{
+	profile := &garth.VO2MaxProfile{
 		UserProfilePK: settings.ID,
 		LastUpdated:   time.Now(),
 	}
 
 	// Add running VO2 max if available
 	if settings.UserData.VO2MaxRunning != nil && *settings.UserData.VO2MaxRunning > 0 {
-		profile.Running = &types.VO2MaxEntry{
+		profile.Running = &garth.VO2MaxEntry{
 			Value:        *settings.UserData.VO2MaxRunning,
 			ActivityType: "running",
 			Date:         time.Now(),
@@ -600,7 +600,7 @@ func (c *Client) GetCurrentVO2Max() (*types.VO2MaxProfile, error) {
 
 	// Add cycling VO2 max if available
 	if settings.UserData.VO2MaxCycling != nil && *settings.UserData.VO2MaxCycling > 0 {
-		profile.Cycling = &types.VO2MaxEntry{
+		profile.Cycling = &garth.VO2MaxEntry{
 			Value:        *settings.UserData.VO2MaxCycling,
 			ActivityType: "cycling",
 			Date:         time.Now(),
@@ -612,7 +612,7 @@ func (c *Client) GetCurrentVO2Max() (*types.VO2MaxProfile, error) {
 }
 
 // GetHeartRateZones retrieves heart rate zone data
-func (c *Client) GetHeartRateZones() (*types.HeartRateZones, error) {
+func (c *Client) GetHeartRateZones() (*garth.HeartRateZones, error) {
 	scheme := "https"
 	if strings.HasPrefix(c.Domain, "127.0.0.1") {
 		scheme = "http"
@@ -661,7 +661,7 @@ func (c *Client) GetHeartRateZones() (*types.HeartRateZones, error) {
 		}
 	}
 
-	var hrZones types.HeartRateZones
+	var hrZones garth.HeartRateZones
 	if err := json.NewDecoder(resp.Body).Decode(&hrZones); err != nil {
 		return nil, &errors.IOError{
 			GarthError: errors.GarthError{
@@ -675,7 +675,7 @@ func (c *Client) GetHeartRateZones() (*types.HeartRateZones, error) {
 }
 
 // GetWellnessData retrieves comprehensive wellness data for a specified date range
-func (c *Client) GetWellnessData(startDate, endDate time.Time) ([]types.WellnessData, error) {
+func (c *Client) GetWellnessData(startDate, endDate time.Time) ([]garth.WellnessData, error) {
 	scheme := "https"
 	if strings.HasPrefix(c.Domain, "127.0.0.1") {
 		scheme = "http"
@@ -728,7 +728,7 @@ func (c *Client) GetWellnessData(startDate, endDate time.Time) ([]types.Wellness
 		}
 	}
 
-	var wellnessData []types.WellnessData
+	var wellnessData []garth.WellnessData
 	if err := json.NewDecoder(resp.Body).Decode(&wellnessData); err != nil {
 		return nil, &errors.IOError{
 			GarthError: errors.GarthError{
@@ -743,7 +743,7 @@ func (c *Client) GetWellnessData(startDate, endDate time.Time) ([]types.Wellness
 
 // SaveSession saves the current session to a file
 func (c *Client) SaveSession(filename string) error {
-	session := types.SessionData{
+	session := garth.SessionData{
 		Domain:    c.Domain,
 		Username:  c.Username,
 		AuthToken: c.AuthToken,
@@ -772,7 +772,7 @@ func (c *Client) SaveSession(filename string) error {
 }
 
 // GetDetailedSleepData retrieves comprehensive sleep data for a date
-func (c *Client) GetDetailedSleepData(date time.Time) (*types.DetailedSleepData, error) {
+func (c *Client) GetDetailedSleepData(date time.Time) (*garth.DetailedSleepData, error) {
 	dateStr := date.Format("2006-01-02")
 	path := fmt.Sprintf("/wellness-service/wellness/dailySleepData/%s?date=%s&nonSleepBufferMinutes=60",
 		c.Username, dateStr)
@@ -787,10 +787,10 @@ func (c *Client) GetDetailedSleepData(date time.Time) (*types.DetailedSleepData,
 	}
 
 	var response struct {
-		DailySleepDTO                       *types.DetailedSleepData `json:"dailySleepDTO"`
-		SleepMovement                       []types.SleepMovement    `json:"sleepMovement"`
+		DailySleepDTO                       *garth.DetailedSleepData `json:"dailySleepDTO"`
+		SleepMovement                       []garth.SleepMovement    `json:"sleepMovement"`
 		RemSleepData                        bool                     `json:"remSleepData"`
-		SleepLevels                         []types.SleepLevel       `json:"sleepLevels"`
+		SleepLevels                         []garth.SleepLevel       `json:"sleepLevels"`
 		SleepRestlessMoments                []interface{}            `json:"sleepRestlessMoments"`
 		RestlessMomentsCount                int                      `json:"restlessMomentsCount"`
 		WellnessSpO2SleepSummaryDTO         interface{}              `json:"wellnessSpO2SleepSummaryDTO"`
@@ -815,7 +815,7 @@ func (c *Client) GetDetailedSleepData(date time.Time) (*types.DetailedSleepData,
 }
 
 // GetDailyHRVData retrieves comprehensive daily HRV data for a date
-func (c *Client) GetDailyHRVData(date time.Time) (*types.DailyHRVData, error) {
+func (c *Client) GetDailyHRVData(date time.Time) (*garth.DailyHRVData, error) {
 	dateStr := date.Format("2006-01-02")
 	path := fmt.Sprintf("/wellness-service/wellness/dailyHrvData/%s?date=%s",
 		c.Username, dateStr)
@@ -830,8 +830,8 @@ func (c *Client) GetDailyHRVData(date time.Time) (*types.DailyHRVData, error) {
 	}
 
 	var response struct {
-		HRVSummary  types.DailyHRVData `json:"hrvSummary"`
-		HRVReadings []types.HRVReading `json:"hrvReadings"`
+		HRVSummary  garth.DailyHRVData `json:"hrvSummary"`
+		HRVReadings []garth.HRVReading `json:"hrvReadings"`
 	}
 
 	if err := json.Unmarshal(data, &response); err != nil {
@@ -844,7 +844,7 @@ func (c *Client) GetDailyHRVData(date time.Time) (*types.DailyHRVData, error) {
 }
 
 // GetDetailedBodyBatteryData retrieves comprehensive Body Battery data for a date
-func (c *Client) GetDetailedBodyBatteryData(date time.Time) (*types.DetailedBodyBatteryData, error) {
+func (c *Client) GetDetailedBodyBatteryData(date time.Time) (*garth.DetailedBodyBatteryData, error) {
 	dateStr := date.Format("2006-01-02")
 
 	// Get main Body Battery data
@@ -862,14 +862,14 @@ func (c *Client) GetDetailedBodyBatteryData(date time.Time) (*types.DetailedBody
 		data2 = []byte("[]")
 	}
 
-	var result types.DetailedBodyBatteryData
+	var result garth.DetailedBodyBatteryData
 	if len(data1) > 0 {
 		if err := json.Unmarshal(data1, &result); err != nil {
 			return nil, fmt.Errorf("failed to parse Body Battery data: %w", err)
 		}
 	}
 
-	var events []types.BodyBatteryEvent
+	var events []garth.BodyBatteryEvent
 	if len(data2) > 0 {
 		if err := json.Unmarshal(data2, &events); err == nil {
 			result.Events = events
@@ -880,7 +880,7 @@ func (c *Client) GetDetailedBodyBatteryData(date time.Time) (*types.DetailedBody
 }
 
 // GetTrainingStatus retrieves current training status
-func (c *Client) GetTrainingStatus(date time.Time) (*types.TrainingStatus, error) {
+func (c *Client) GetTrainingStatus(date time.Time) (*garth.TrainingStatus, error) {
 	dateStr := date.Format("2006-01-02")
 	path := fmt.Sprintf("/metrics-service/metrics/trainingStatus/%s", dateStr)
 
@@ -893,7 +893,7 @@ func (c *Client) GetTrainingStatus(date time.Time) (*types.TrainingStatus, error
 		return nil, nil
 	}
 
-	var result types.TrainingStatus
+	var result garth.TrainingStatus
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse training status: %w", err)
 	}
@@ -902,7 +902,7 @@ func (c *Client) GetTrainingStatus(date time.Time) (*types.TrainingStatus, error
 }
 
 // GetTrainingLoad retrieves training load data
-func (c *Client) GetTrainingLoad(date time.Time) (*types.TrainingLoad, error) {
+func (c *Client) GetTrainingLoad(date time.Time) (*garth.TrainingLoad, error) {
 	dateStr := date.Format("2006-01-02")
 	endDate := date.AddDate(0, 0, 6).Format("2006-01-02") // Get week of data
 	path := fmt.Sprintf("/metrics-service/metrics/trainingLoad/%s/%s", dateStr, endDate)
@@ -916,7 +916,7 @@ func (c *Client) GetTrainingLoad(date time.Time) (*types.TrainingLoad, error) {
 		return nil, nil
 	}
 
-	var results []types.TrainingLoad
+	var results []garth.TrainingLoad
 	if err := json.Unmarshal(data, &results); err != nil {
 		return nil, fmt.Errorf("failed to parse training load: %w", err)
 	}
@@ -940,7 +940,7 @@ func (c *Client) LoadSession(filename string) error {
 		}
 	}
 
-	var session types.SessionData
+	var session garth.SessionData
 	if err := json.Unmarshal(data, &session); err != nil {
 		return &errors.IOError{
 			GarthError: errors.GarthError{

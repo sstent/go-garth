@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	types "github.com/sstent/go-garth/internal/models/types"
+	garth "github.com/sstent/go-garth/pkg/garth/types"
 	shared "github.com/sstent/go-garth/shared/interfaces"
 )
 
-// TrainingStatusWithMethods embeds types.TrainingStatus and adds methods
+// TrainingStatusWithMethods embeds garth.TrainingStatus and adds methods
 type TrainingStatusWithMethods struct {
-	types.TrainingStatus
+	garth.TrainingStatus
 }
 
 func (t *TrainingStatusWithMethods) Get(day time.Time, c shared.APIClient) (interface{}, error) {
@@ -27,7 +27,7 @@ func (t *TrainingStatusWithMethods) Get(day time.Time, c shared.APIClient) (inte
 		return nil, nil
 	}
 
-	var result types.TrainingStatus
+	var result garth.TrainingStatus
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, fmt.Errorf("failed to parse training status: %w", err)
 	}
@@ -35,9 +35,9 @@ func (t *TrainingStatusWithMethods) Get(day time.Time, c shared.APIClient) (inte
 	return &TrainingStatusWithMethods{TrainingStatus: result}, nil
 }
 
-// TrainingLoadWithMethods embeds types.TrainingLoad and adds methods
+// TrainingLoadWithMethods embeds garth.TrainingLoad and adds methods
 type TrainingLoadWithMethods struct {
-	types.TrainingLoad
+	garth.TrainingLoad
 }
 
 func (t *TrainingLoadWithMethods) Get(day time.Time, c shared.APIClient) (interface{}, error) {
@@ -54,7 +54,7 @@ func (t *TrainingLoadWithMethods) Get(day time.Time, c shared.APIClient) (interf
 		return nil, nil
 	}
 
-	var results []types.TrainingLoad
+	var results []garth.TrainingLoad
 	if err := json.Unmarshal(data, &results); err != nil {
 		return nil, fmt.Errorf("failed to parse training load: %w", err)
 	}

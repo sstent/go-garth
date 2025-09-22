@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"time"
 
-	types "github.com/sstent/go-garth/internal/models/types"
+	garth "github.com/sstent/go-garth/pkg/garth/types"
 	shared "github.com/sstent/go-garth/shared/interfaces"
 )
 
-// DetailedSleepDataWithMethods embeds types.DetailedSleepData and adds methods
+// DetailedSleepDataWithMethods embeds garth.DetailedSleepData and adds methods
 type DetailedSleepDataWithMethods struct {
-	types.DetailedSleepData
+	garth.DetailedSleepData
 }
 
 func (d *DetailedSleepDataWithMethods) Get(day time.Time, c shared.APIClient) (interface{}, error) {
@@ -29,10 +29,10 @@ func (d *DetailedSleepDataWithMethods) Get(day time.Time, c shared.APIClient) (i
 	}
 
 	var response struct {
-		DailySleepDTO                       *types.DetailedSleepData `json:"dailySleepDTO"`
-		SleepMovement                       []types.SleepMovement    `json:"sleepMovement"`
+		DailySleepDTO                       *garth.DetailedSleepData `json:"dailySleepDTO"`
+		SleepMovement                       []garth.SleepMovement    `json:"sleepMovement"`
 		RemSleepData                        bool                     `json:"remSleepData"`
-		SleepLevels                         []types.SleepLevel       `json:"sleepLevels"`
+		SleepLevels                         []garth.SleepLevel       `json:"sleepLevels"`
 		SleepRestlessMoments                []interface{}            `json:"sleepRestlessMoments"`
 		RestlessMomentsCount                int                      `json:"restlessMomentsCount"`
 		WellnessSpO2SleepSummaryDTO         interface{}              `json:"wellnessSpO2SleepSummaryDTO"`
@@ -58,8 +58,8 @@ func (d *DetailedSleepDataWithMethods) Get(day time.Time, c shared.APIClient) (i
 
 // GetSleepEfficiency calculates sleep efficiency percentage
 func (d *DetailedSleepDataWithMethods) GetSleepEfficiency() float64 {
-	totalTime := d.SleepEndTimestampGMT.Sub(d.SleepStartTimestampGMT).Seconds()
-	sleepTime := float64(d.DeepSleepSeconds + d.LightSleepSeconds + d.RemSleepSeconds)
+	totalTime := d.DetailedSleepData.SleepEndTimestampGMT.Sub(d.DetailedSleepData.SleepStartTimestampGMT).Seconds()
+	sleepTime := float64(d.DetailedSleepData.DeepSleepSeconds + d.DetailedSleepData.LightSleepSeconds + d.DetailedSleepData.RemSleepSeconds)
 	if totalTime == 0 {
 		return 0
 	}
@@ -68,6 +68,6 @@ func (d *DetailedSleepDataWithMethods) GetSleepEfficiency() float64 {
 
 // GetTotalSleepTime returns total sleep time in hours
 func (d *DetailedSleepDataWithMethods) GetTotalSleepTime() float64 {
-	totalSeconds := d.DeepSleepSeconds + d.LightSleepSeconds + d.RemSleepSeconds
+	totalSeconds := d.DetailedSleepData.DeepSleepSeconds + d.DetailedSleepData.LightSleepSeconds + d.DetailedSleepData.RemSleepSeconds
 	return float64(totalSeconds) / 3600.0
 }
