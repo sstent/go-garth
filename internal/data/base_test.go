@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"go-garth/internal/api/client"
+	"github.com/sstent/go-garth/internal/api/client"
 
 	"github.com/stretchr/testify/assert"
 )

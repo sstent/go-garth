@@ -11,8 +11,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	types "go-garth/internal/models/types"
-	"go-garth/pkg/garmin"
+	types "github.com/sstent/go-garth/internal/models/types"
+	"github.com/sstent/go-garth/pkg/garmin"
 )
 
 var (

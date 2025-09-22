@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	shared "go-garth/shared/interfaces"
+	shared "github.com/sstent/go-garth/shared/interfaces"
 )
 
 // WeightData represents weight data

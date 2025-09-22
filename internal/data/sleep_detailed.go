@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	types "go-garth/internal/models/types"
-	shared "go-garth/shared/interfaces"
+	types "github.com/sstent/go-garth/internal/models/types"
+	shared "github.com/sstent/go-garth/shared/interfaces"
 )
 
 // DetailedSleepDataWithMethods embeds types.DetailedSleepData and adds methods

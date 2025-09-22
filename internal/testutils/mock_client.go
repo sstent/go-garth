@@ -5,7 +5,7 @@ import (
 	"io"
 	"net/url"
 
-	"go-garth/internal/api/client"
+	"github.com/sstent/go-garth/internal/api/client"
 )
 
 // MockClient simulates API client for tests

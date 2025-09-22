@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"go-garth/internal/utils"
+	"github.com/sstent/go-garth/internal/utils"
 )
 
 // Data defines the interface for Garmin Connect data models.

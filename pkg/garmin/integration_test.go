@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"go-garth/internal/api/client"
-	"go-garth/internal/data"
-	"go-garth/internal/stats"
+	"github.com/sstent/go-garth/internal/api/client"
+	"github.com/sstent/go-garth/internal/data"
+	"github.com/sstent/go-garth/internal/stats"
 )
 
 func TestBodyBatteryIntegration(t *testing.T) {

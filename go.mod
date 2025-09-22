@@ -1,4 +1,4 @@
-module go-garth
+module github.com/sstent/go-garth
 
 go 1.24.2
 

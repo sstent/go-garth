@@ -5,9 +5,9 @@ import (
 	"log"
 	"time"
 
-	"go-garth/internal/api/client"
-	"go-garth/internal/auth/credentials"
-	types "go-garth/pkg/garmin"
+	"github.com/sstent/go-garth/internal/api/client"
+	"github.com/sstent/go-garth/internal/auth/credentials"
+	types "github.com/sstent/go-garth/pkg/garmin"
 )
 
 func main() {

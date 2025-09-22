@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 
-	"go-garth/internal/config"
+	"github.com/sstent/go-garth/internal/config"
 )
 
 func init() {

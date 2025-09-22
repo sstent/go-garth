@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"go-garth/internal/api/client"
-	"go-garth/internal/models"
+	types "github.com/sstent/go-garth/internal/models/types"
+	"github.com/sstent/go-garth/shared/interfaces"
+	"github.com/sstent/go-garth/shared/models"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -14,9 +15,9 @@ func TestVO2MaxData_Get(t *testing.T) {
 	// Setup
 	runningVO2 := 45.0
 	cyclingVO2 := 50.0
-	settings := &client.UserSettings{
+	settings := &models.UserSettings{
 		ID: 12345,
-		UserData: client.UserData{
+		UserData: models.UserData{
 			VO2MaxRunning: &runningVO2,
 			VO2MaxCycling: &cyclingVO2,
 		},
@@ -25,14 +26,14 @@ func TestVO2MaxData_Get(t *testing.T) {
 	vo2Data := NewVO2MaxData()
 
 	// Mock the get function
-	vo2Data.GetFunc = func(day time.Time, c *client.Client) (interface{}, error) {
-		vo2Profile := &models.VO2MaxProfile{
+	vo2Data.GetFunc = func(day time.Time, c interfaces.APIClient) (interface{}, error) {
+		vo2Profile := &types.VO2MaxProfile{
 			UserProfilePK: settings.ID,
 			LastUpdated:   time.Now(),
 		}
 
 		if settings.UserData.VO2MaxRunning != nil && *settings.UserData.VO2MaxRunning > 0 {
-			vo2Profile.Running = &models.VO2MaxEntry{
+			vo2Profile.Running = &types.VO2MaxEntry{
 				Value:        *settings.UserData.VO2MaxRunning,
 				ActivityType: "running",
 				Date:         day,
@@ -41,7 +42,7 @@ func TestVO2MaxData_Get(t *testing.T) {
 		}
 
 		if settings.UserData.VO2MaxCycling != nil && *settings.UserData.VO2MaxCycling > 0 {
-			vo2Profile.Cycling = &models.VO2MaxEntry{
+			vo2Profile.Cycling = &types.VO2MaxEntry{
 				Value:        *settings.UserData.VO2MaxCycling,
 				ActivityType: "cycling",
 				Date:         day,
@@ -58,7 +59,7 @@ func TestVO2MaxData_Get(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
-	profile, ok := result.(*models.VO2MaxProfile)
+	profile, ok := result.(*types.VO2MaxProfile)
 	assert.True(t, ok)
 	assert.Equal(t, 12345, profile.UserProfilePK)
 	assert.NotNil(t, profile.Running)

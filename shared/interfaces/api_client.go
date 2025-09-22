@@ -5,8 +5,8 @@ import (
 	"net/url"
 	"time"
 
-	types "go-garth/internal/models/types"
-	"go-garth/shared/models"
+	types "github.com/sstent/go-garth/internal/models/types"
+	"github.com/sstent/go-garth/shared/models"
 )
 
 // APIClient defines the interface for making API calls that data packages need.

@@ -6,7 +6,7 @@ import (
 
 	"golang.org/x/term"
 
-	"go-garth/pkg/garmin"
+	"github.com/sstent/go-garth/pkg/garmin"
 
 	"github.com/spf13/cobra"
 )

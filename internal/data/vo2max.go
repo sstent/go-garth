@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
-	shared "go-garth/shared/interfaces"
-	types "go-garth/internal/models/types"
+	shared "github.com/sstent/go-garth/shared/interfaces"
+	types "github.com/sstent/go-garth/internal/models/types"
 )
 
 // VO2MaxData implements the Data interface for VO2 max retrieval

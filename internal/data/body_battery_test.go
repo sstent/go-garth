@@ -1,7 +1,7 @@
 package data
 
 import (
-	types "go-garth/internal/models/types"
+	types "github.com/sstent/go-garth/internal/models/types"
 	"testing"
 
 	"github.com/stretchr/testify/assert"

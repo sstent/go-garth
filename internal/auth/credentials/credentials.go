@@ -11,7 +11,7 @@ import (
 // LoadEnvCredentials loads credentials from .env file
 func LoadEnvCredentials() (email, password, domain string, err error) {
 	// Determine project root (assuming .env is in the project root)
-	projectRoot := "/home/sstent/Projects/go-garth"
+	projectRoot := "/home/sstent/Projects/github.com/sstent/go-garth"
 	envPath := filepath.Join(projectRoot, ".env")
 
 	// Load .env file

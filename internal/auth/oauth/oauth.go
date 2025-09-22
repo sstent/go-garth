@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"go-garth/internal/models/types"
-	"go-garth/internal/utils"
+	"github.com/sstent/go-garth/internal/models/types"
+	"github.com/sstent/go-garth/internal/utils"
 )
 
 // GetOAuth1Token retrieves an OAuth1 token using the provided ticket

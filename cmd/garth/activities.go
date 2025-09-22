@@ -15,7 +15,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"go-garth/pkg/garmin"
+	"github.com/sstent/go-garth/pkg/garmin"
 )
 
 var (

@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"go-garth/internal/testutils"
+	"github.com/sstent/go-garth/internal/testutils"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"go-garth/internal/api/client"
+	"github.com/sstent/go-garth/internal/api/client"
 )
 
 func TestClient_GetUserProfile(t *testing.T) {

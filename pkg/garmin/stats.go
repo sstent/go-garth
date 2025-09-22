@@ -3,7 +3,7 @@ package garmin
 import (
 	"time"
 
-	"go-garth/internal/stats"
+	"github.com/sstent/go-garth/internal/stats"
 )
 
 // Stats is an interface for stats data types.

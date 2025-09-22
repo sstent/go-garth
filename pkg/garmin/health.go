@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	internalClient "go-garth/internal/api/client"
-	"go-garth/internal/models/types"
+	internalClient "github.com/sstent/go-garth/internal/api/client"
+	"github.com/sstent/go-garth/internal/models/types"
 )
 
 func (c *Client) GetDailyHRVData(date time.Time) (*types.DailyHRVData, error) {

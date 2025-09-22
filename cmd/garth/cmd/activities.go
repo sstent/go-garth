@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"go-garth/internal/auth/credentials"
-	"go-garth/pkg/garmin"
+	"github.com/sstent/go-garth/internal/auth/credentials"
+	"github.com/sstent/go-garth/pkg/garmin"
 
 	"github.com/spf13/cobra"
 )

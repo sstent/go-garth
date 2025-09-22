@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"go-garth/internal/api/client"
-	"go-garth/internal/utils"
+	"github.com/sstent/go-garth/internal/api/client"
+	"github.com/sstent/go-garth/internal/utils"
 )
 
 type Stats interface {
