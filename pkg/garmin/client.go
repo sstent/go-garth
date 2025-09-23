@@ -1,6 +1,7 @@
 package garmin
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/url"
@@ -8,8 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	internalClient "github.com/sstent/go-garth/pkg/garth/client"
 	"github.com/sstent/go-garth/internal/errors"
+	internalClient "github.com/sstent/go-garth/pkg/garth/client"
+	garth "github.com/sstent/go-garth/pkg/garth/types"
 	shared "github.com/sstent/go-garth/shared/interfaces"
 	models "github.com/sstent/go-garth/shared/models"
 )
@@ -81,9 +83,7 @@ func (c *Client) RefreshSession() error {
 
 // ListActivities retrieves recent activities
 func (c *Client) ListActivities(opts ActivityOptions) ([]Activity, error) {
-	// TODO: Map ActivityOptions to internalClient.Client.GetActivities parameters
-	// For now, just call the internal client's GetActivities with a dummy limit
-	internalActivities, err := c.Client.GetActivities(opts.Limit)
+	internalActivities, err := c.Client.GetActivitiesWithOptions(opts.Limit, opts.Offset, opts.ActivityType, opts.DateFrom, opts.DateTo)
 	if err != nil {
 		return nil, err
 	}
@@ -104,8 +104,33 @@ func (c *Client) ListActivities(opts ActivityOptions) ([]Activity, error) {
 
 // GetActivity retrieves details for a specific activity ID
 func (c *Client) GetActivity(activityID int) (*ActivityDetail, error) {
-	// TODO: Implement internalClient.Client.GetActivity
-	return nil, fmt.Errorf("not implemented")
+	path := fmt.Sprintf("/activity-service/activity/%d", activityID)
+
+	data, err := c.Client.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get activity details: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, fmt.Errorf("activity not found")
+	}
+
+	var activity garth.Activity
+	if err := json.Unmarshal(data, &activity); err != nil {
+		return nil, fmt.Errorf("failed to parse activity response: %w", err)
+	}
+
+	return &ActivityDetail{
+		Activity: Activity{
+			ActivityID:     activity.ActivityID,
+			ActivityName:   activity.ActivityName,
+			ActivityType:   ActivityType(activity.ActivityType),
+			StartTimeLocal: activity.StartTimeLocal,
+			Distance:       activity.Distance,
+			Duration:       activity.Duration,
+		},
+		Description: activity.Description,
+	}, nil
 }
 
 // DownloadActivity downloads activity data
@@ -162,8 +187,37 @@ func (c *Client) DownloadActivity(activityID int, opts DownloadOptions) error {
 
 // SearchActivities searches for activities by a query string
 func (c *Client) SearchActivities(query string) ([]Activity, error) {
-	// TODO: Implement internalClient.Client.SearchActivities
-	return nil, fmt.Errorf("not implemented")
+	params := url.Values{}
+	params.Add("search", query)
+	params.Add("limit", "20") // Default limit
+
+	data, err := c.Client.ConnectAPI("/activitylist-service/activities/search/activities", "GET", params, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search activities: %w", err)
+	}
+
+	if len(data) == 0 {
+		return []Activity{}, nil
+	}
+
+	var garthActivities []garth.Activity
+	if err := json.Unmarshal(data, &garthActivities); err != nil {
+		return nil, fmt.Errorf("failed to parse search response: %w", err)
+	}
+
+	var activities []Activity
+	for _, act := range garthActivities {
+		activities = append(activities, Activity{
+			ActivityID:     act.ActivityID,
+			ActivityName:   act.ActivityName,
+			ActivityType:   ActivityType(act.ActivityType),
+			StartTimeLocal: act.StartTimeLocal,
+			Distance:       act.Distance,
+			Duration:       act.Duration,
+		})
+	}
+
+	return activities, nil
 }
 
 // GetSleepData retrieves sleep data for a specified date range
@@ -223,8 +277,27 @@ func (c *Client) GetTrainingLoad(date time.Time) (*TrainingLoad, error) {
 
 // GetFitnessAge retrieves fitness age calculation
 func (c *Client) GetFitnessAge() (*FitnessAge, error) {
-	// TODO: Implement GetFitnessAge in internalClient.Client
-	return nil, fmt.Errorf("GetFitnessAge not implemented in internalClient.Client")
+	data, err := c.Client.ConnectAPI("/fitness-service/fitness/fitnessAge", "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get fitness age: %w", err)
+	}
+
+	if len(data) == 0 {
+		return nil, nil
+	}
+
+	var fitnessAge garth.FitnessAge
+	if err := json.Unmarshal(data, &fitnessAge); err != nil {
+		return nil, fmt.Errorf("failed to parse fitness age response: %w", err)
+	}
+
+	fitnessAge.LastUpdated = time.Now()
+	return &FitnessAge{
+		FitnessAge:       fitnessAge.FitnessAge,
+		ChronologicalAge: fitnessAge.ChronologicalAge,
+		VO2MaxRunning:    fitnessAge.VO2MaxRunning,
+		LastUpdated:      fitnessAge.LastUpdated,
+	}, nil
 }
 
 // OAuth1Token returns the OAuth1 token

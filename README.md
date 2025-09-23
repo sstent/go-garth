@@ -25,35 +25,101 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	
+
 	err = client.Login("your@email.com", "password")
 	if err != nil {
 		panic(err)
 	}
 
-	// Get yesterday's body battery data (detailed)
-	yesterday := time.Now().AddDate(0, 0, -1)
-	bb, err := client.GetBodyBatteryData(yesterday)
+	// List recent activities with filtering
+	opts := garmin.ActivityOptions{
+		Limit:       10,
+		Offset:      0,
+		ActivityType: "running", // optional filter
+		DateFrom:    time.Now().AddDate(0, 0, -30), // last 30 days
+		DateTo:      time.Now(),
+	}
+	activities, err := client.ListActivities(opts)
 	if err != nil {
 		panic(err)
-	}
-	
-	if bb != nil {
-		fmt.Printf("Body Battery: %d\n", bb.BodyBatteryValue)
 	}
 
-	// Get weekly steps
-	steps := garmin.NewDailySteps()
-	stepData, err := steps.List(time.Now(), 7, client)
+	for _, activity := range activities {
+		fmt.Printf("%s: %s (%.2f km)\n",
+			activity.StartTimeLocal.Format("2006-01-02"),
+			activity.ActivityName,
+			activity.Distance/1000)
+	}
+
+	// Get detailed activity information
+	if len(activities) > 0 {
+		activityDetail, err := client.GetActivity(activities[0].ActivityID)
+		if err != nil {
+			panic(err)
+		}
+		fmt.Printf("Activity details: %+v\n", activityDetail)
+	}
+
+	// Search for activities
+	searchResults, err := client.SearchActivities("morning run")
 	if err != nil {
 		panic(err)
 	}
-	
-	for _, s := range stepData {
-		fmt.Printf("%s: %d steps\n",
-			s.(garmin.DailySteps).CalendarDate.Format("2006-01-02"),
-			*s.(garmin.DailySteps).TotalSteps)
+	fmt.Printf("Found %d activities matching search\n", len(searchResults))
+
+	// Get fitness age
+	fitnessAge, err := client.GetFitnessAge()
+	if err != nil {
+		panic(err)
 	}
+	fmt.Printf("Fitness Age: %d (Chronological: %d)\n",
+		fitnessAge.FitnessAge, fitnessAge.ChronologicalAge)
+
+	// Get health data ranges
+	start := time.Now().AddDate(0, 0, -7)
+	end := time.Now()
+
+	sleepData, err := client.GetSleepData(start, end)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Sleep records: %d\n", len(sleepData))
+
+	hrvData, err := client.GetHrvData(start, end)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("HRV records: %d\n", len(hrvData))
+
+	stressData, err := client.GetStressData(start, end)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Stress records: %d\n", len(stressData))
+
+	bodyBatteryData, err := client.GetBodyBatteryData(start, end)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Body Battery records: %d\n", len(bodyBatteryData))
+
+	stepsData, err := client.GetStepsData(start, end)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Steps records: %d\n", len(stepsData))
+
+	distanceData, err := client.GetDistanceData(start, end)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Distance records: %d\n", len(distanceData))
+
+	caloriesData, err := client.GetCaloriesData(start, end)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf("Calories records: %d\n", len(caloriesData))
 }
 ```
 

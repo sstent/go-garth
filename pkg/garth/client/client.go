@@ -16,6 +16,7 @@ import (
 
 	"github.com/sstent/go-garth/internal/auth/sso"
 	"github.com/sstent/go-garth/internal/errors"
+	"github.com/sstent/go-garth/internal/utils"
 	garth "github.com/sstent/go-garth/pkg/garth/types"
 	shared "github.com/sstent/go-garth/shared/interfaces"
 	models "github.com/sstent/go-garth/shared/models"
@@ -503,45 +504,233 @@ func (c *Client) GetActivities(limit int) ([]garth.Activity, error) {
 	return activities, nil
 }
 
-func (c *Client) GetSleepData(startDate, endDate time.Time) ([]garth.SleepData, error) {
-	// TODO: Implement GetSleepData
-	return nil, fmt.Errorf("GetSleepData not implemented")
+// GetActivitiesWithOptions retrieves activities with filtering options
+func (c *Client) GetActivitiesWithOptions(limit, offset int, activityType string, dateFrom, dateTo time.Time) ([]garth.Activity, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	scheme := "https"
+	if strings.HasPrefix(c.Domain, "127.0.0.1") {
+		scheme = "http"
+	}
+
+	params := url.Values{}
+	params.Add("limit", fmt.Sprintf("%d", limit))
+	params.Add("start", fmt.Sprintf("%d", offset))
+	if activityType != "" {
+		params.Add("activityType", activityType)
+	}
+	if !dateFrom.IsZero() {
+		params.Add("startDate", dateFrom.Format("2006-01-02"))
+	}
+	if !dateTo.IsZero() {
+		params.Add("endDate", dateTo.Format("2006-01-02"))
+	}
+
+	activitiesURL := fmt.Sprintf("%s://connectapi.%s/activitylist-service/activities/search/activities?%s", scheme, c.Domain, params.Encode())
+
+	req, err := http.NewRequest("GET", activitiesURL, nil)
+	if err != nil {
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to create activities request",
+					Cause:   err,
+				},
+			},
+		}
+	}
+
+	req.Header.Set("Authorization", c.AuthToken)
+	req.Header.Set("User-Agent", "com.garmin.android.apps.connectmobile")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				GarthError: errors.GarthError{
+					Message: "Failed to get activities",
+					Cause:   err,
+				},
+			},
+		}
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, &errors.APIError{
+			GarthHTTPError: errors.GarthHTTPError{
+				StatusCode: resp.StatusCode,
+				Response:   string(body),
+				GarthError: errors.GarthError{
+					Message: "Activities request failed",
+				},
+			},
+		}
+	}
+
+	var activities []garth.Activity
+	if err := json.NewDecoder(resp.Body).Decode(&activities); err != nil {
+		return nil, &errors.IOError{
+			GarthError: errors.GarthError{
+				Message: "Failed to parse activities",
+				Cause:   err,
+			},
+		}
+	}
+
+	return activities, nil
 }
 
-// GetHrvData retrieves HRV data for a specified number of days
-func (c *Client) GetHrvData(days int) ([]garth.HrvData, error) {
-	// TODO: Implement GetHrvData
-	return nil, fmt.Errorf("GetHrvData not implemented")
+func (c *Client) GetSleepData(startDate, endDate time.Time) ([]garth.SleepData, error) {
+	path := fmt.Sprintf("/usersummary-service/stats/sleep/daily/%s/%s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
+
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sleep data: %w", err)
+	}
+
+	if len(data) == 0 {
+		return []garth.SleepData{}, nil
+	}
+
+	var result []garth.SleepData
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse sleep response: %w", err)
+	}
+
+	return result, nil
+}
+
+// GetHrvData retrieves HRV data for a specified date range
+func (c *Client) GetHrvData(startDate, endDate time.Time) ([]garth.HrvData, error) {
+	path := fmt.Sprintf("/usersummary-service/stats/hrv/daily/%s/%s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
+
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get HRV data: %w", err)
+	}
+
+	if len(data) == 0 {
+		return []garth.HrvData{}, nil
+	}
+
+	var result []garth.HrvData
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse HRV response: %w", err)
+	}
+
+	return result, nil
 }
 
 // GetStressData retrieves stress data
 func (c *Client) GetStressData(startDate, endDate time.Time) ([]garth.StressData, error) {
-	// TODO: Implement GetStressData
-	return nil, fmt.Errorf("GetStressData not implemented")
+	path := fmt.Sprintf("/usersummary-service/stats/stress/daily/%s/%s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
+
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stress data: %w", err)
+	}
+
+	if len(data) == 0 {
+		return []garth.StressData{}, nil
+	}
+
+	var result []garth.StressData
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse stress response: %w", err)
+	}
+
+	return result, nil
 }
 
 // GetBodyBatteryData retrieves Body Battery data
 func (c *Client) GetBodyBatteryData(startDate, endDate time.Time) ([]garth.BodyBatteryData, error) {
-	// TODO: Implement GetBodyBatteryData
-	return nil, fmt.Errorf("GetBodyBatteryData not implemented")
+	path := fmt.Sprintf("/usersummary-service/stats/bodybattery/daily/%s/%s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
+
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Body Battery data: %w", err)
+	}
+
+	if len(data) == 0 {
+		return []garth.BodyBatteryData{}, nil
+	}
+
+	var result []garth.BodyBatteryData
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse Body Battery response: %w", err)
+	}
+
+	return result, nil
 }
 
 // GetStepsData retrieves steps data for a specified date range
 func (c *Client) GetStepsData(startDate, endDate time.Time) ([]garth.StepsData, error) {
-	// TODO: Implement GetStepsData
-	return nil, fmt.Errorf("GetStepsData not implemented")
+	path := fmt.Sprintf("/usersummary-service/stats/steps/daily/%s/%s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
+
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get steps data: %w", err)
+	}
+
+	if len(data) == 0 {
+		return []garth.StepsData{}, nil
+	}
+
+	var result []garth.StepsData
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse steps response: %w", err)
+	}
+
+	return result, nil
 }
 
 // GetDistanceData retrieves distance data for a specified date range
 func (c *Client) GetDistanceData(startDate, endDate time.Time) ([]garth.DistanceData, error) {
-	// TODO: Implement GetDistanceData
-	return nil, fmt.Errorf("GetDistanceData not implemented")
+	path := fmt.Sprintf("/usersummary-service/stats/distance/daily/%s/%s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
+
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get distance data: %w", err)
+	}
+
+	if len(data) == 0 {
+		return []garth.DistanceData{}, nil
+	}
+
+	var result []garth.DistanceData
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse distance response: %w", err)
+	}
+
+	return result, nil
 }
 
 // GetCaloriesData retrieves calories data for a specified date range
 func (c *Client) GetCaloriesData(startDate, endDate time.Time) ([]garth.CaloriesData, error) {
-	// TODO: Implement GetCaloriesData
-	return nil, fmt.Errorf("GetCaloriesData not implemented")
+	path := fmt.Sprintf("/usersummary-service/stats/calories/daily/%s/%s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02"))
+
+	data, err := c.ConnectAPI(path, "GET", nil, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get calories data: %w", err)
+	}
+
+	if len(data) == 0 {
+		return []garth.CaloriesData{}, nil
+	}
+
+	var result []garth.CaloriesData
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, fmt.Errorf("failed to parse calories response: %w", err)
+	}
+
+	return result, nil
 }
 
 // GetVO2MaxData retrieves VO2 max data using the modern approach via user settings
@@ -959,6 +1148,56 @@ func (c *Client) LoadSession(filename string) error {
 
 // RefreshSession refreshes the authentication tokens
 func (c *Client) RefreshSession() error {
-	// TODO: Implement token refresh logic
-	return fmt.Errorf("RefreshSession not implemented")
+	if c.OAuth2Token == nil || c.OAuth2Token.RefreshToken == "" {
+		return fmt.Errorf("no refresh token available")
+	}
+
+	consumer, err := utils.LoadOAuthConsumer()
+	if err != nil {
+		return fmt.Errorf("failed to load OAuth consumer: %w", err)
+	}
+
+	scheme := "https"
+	if strings.HasPrefix(c.Domain, "127.0.0.1") {
+		scheme = "http"
+	}
+	tokenURL := fmt.Sprintf("%s://connectapi.%s/oauth-service/oauth/token", scheme, c.Domain)
+
+	data := url.Values{}
+	data.Set("grant_type", "refresh_token")
+	data.Set("refresh_token", c.OAuth2Token.RefreshToken)
+
+	req, err := http.NewRequest("POST", tokenURL, strings.NewReader(data.Encode()))
+	if err != nil {
+		return fmt.Errorf("failed to create refresh request: %w", err)
+	}
+
+	req.SetBasicAuth(consumer.ConsumerKey, consumer.ConsumerSecret)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", "garth-go-client/1.0")
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("refresh request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("refresh failed with status %d: %s", resp.StatusCode, body)
+	}
+
+	var newToken garth.OAuth2Token
+	if err := json.NewDecoder(resp.Body).Decode(&newToken); err != nil {
+		return fmt.Errorf("failed to decode refresh response: %w", err)
+	}
+
+	// Update token with new values while preserving existing fields
+	c.OAuth2Token.AccessToken = newToken.AccessToken
+	c.OAuth2Token.RefreshToken = newToken.RefreshToken
+	c.OAuth2Token.ExpiresIn = newToken.ExpiresIn
+	c.OAuth2Token.ExpiresAt = time.Now().Add(time.Duration(newToken.ExpiresIn) * time.Second)
+	c.AuthToken = fmt.Sprintf("%s %s", newToken.TokenType, newToken.AccessToken)
+
+	return nil
 }
